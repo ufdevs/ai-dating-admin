@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import {
   Users,
@@ -42,17 +42,36 @@ import {
 } from "recharts";
 
 export default function App() {
-  const [token, setToken] = useState(localStorage.getItem("admin_token") || "");
-  const [baseUrl, setBaseUrl] = useState(
-    localStorage.getItem("admin_base_url") || "http://localhost:3000/api/v2"
-  );
+  const defaultApiUrl =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:4000/api/v2";
+
+  const [token, setToken] = useState(() => {
+    const saved = localStorage.getItem("admin_token") || "";
+    // Clear stale or mock session tokens
+    if (saved.startsWith("admin_session_")) {
+      localStorage.removeItem("admin_token");
+      return "";
+    }
+    return saved;
+  });
+
+  const [baseUrl, setBaseUrl] = useState(() => {
+    const saved = localStorage.getItem("admin_base_url");
+    if (!saved || saved.includes("localhost:3000")) {
+      return defaultApiUrl;
+    }
+    return saved;
+  });
 
   // Auth states
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [isAuthLoading, setIsAuthLoading] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(!!token);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    const saved = localStorage.getItem("admin_token") || "";
+    return !!saved && !saved.startsWith("admin_session_");
+  });
 
   // App navigation state
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -160,31 +179,63 @@ export default function App() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Axios helper
-  const api = axios.create({
-    baseURL: baseUrl,
-    headers: { Authorization: token ? `Bearer ${token}` : "" },
-  });
+  // Axios helper with token authentication and auto-logout on 401
+  const api = useMemo(() => {
+    const cleanBase = (baseUrl || defaultApiUrl).replace(/\/+$/, "");
+    const instance = axios.create({
+      baseURL: cleanBase,
+      headers: { Authorization: token ? `Bearer ${token}` : "" },
+    });
+
+    instance.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          localStorage.removeItem("admin_token");
+          setToken("");
+          setIsLoggedIn(false);
+          setAuthError("Session expired or unauthorized. Please log in again.");
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    return instance;
+  }, [baseUrl, token]);
 
   const showToast = (msg) => {
     setNotificationMsg(msg);
     setTimeout(() => setNotificationMsg(""), 4000);
   };
 
-  // Auth handler
+  // Auth handler: authenticates against backend /api/v2/admin/login
   const handleLogin = async (e) => {
     e.preventDefault();
     setIsAuthLoading(true);
     setAuthError("");
     try {
-      // In development or admin auth, accept credentials and set session
-      const adminToken = "admin_session_" + Date.now();
-      localStorage.setItem("admin_token", adminToken);
-      localStorage.setItem("admin_base_url", baseUrl);
-      setToken(adminToken);
+      const cleanBase = (baseUrl || defaultApiUrl).replace(/\/+$/, "");
+      const res = await axios.post(`${cleanBase}/admin/login`, {
+        email: email.trim(),
+        password: password.trim(),
+      });
+
+      const authToken = res.data?.data?.accessToken;
+      if (!authToken) {
+        throw new Error(res.data?.message || "Failed to obtain admin access token");
+      }
+
+      localStorage.setItem("admin_token", authToken);
+      localStorage.setItem("admin_base_url", cleanBase);
+      setToken(authToken);
       setIsLoggedIn(true);
+      showToast("Admin authenticated successfully! 🚀");
     } catch (err) {
-      setAuthError(err.message || "Login failed");
+      const errMsg =
+        err.response?.data?.message ||
+        err.message ||
+        "Login failed. Check your API URL and credentials.";
+      setAuthError(errMsg);
     } finally {
       setIsAuthLoading(false);
     }
@@ -251,18 +302,27 @@ export default function App() {
   const handleSavePersona = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...personaForm,
+        supportedLanguages: Array.isArray(personaForm.language)
+          ? personaForm.language
+          : [personaForm.language || "en"],
+        language: Array.isArray(personaForm.language)
+          ? personaForm.language
+          : [personaForm.language || "en"],
+      };
       if (editingPersona) {
-        await api.put(`/admin/personas/${editingPersona._id}`, personaForm);
+        await api.put(`/admin/personas/${editingPersona._id}`, payload);
         showToast("AI Persona updated successfully! ✨");
       } else {
-        await api.post("/admin/personas", personaForm);
+        await api.post("/admin/personas", payload);
         showToast("New AI Persona created! 🚀");
       }
       setIsPersonaModalOpen(false);
       setEditingPersona(null);
       fetchData();
     } catch (err) {
-      showToast("Failed to save persona: " + err.message);
+      showToast("Failed to save persona: " + (err.response?.data?.message || err.message));
     }
   };
 
