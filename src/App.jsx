@@ -135,6 +135,17 @@ export default function App() {
     livekitUrl: "",
     livekitApiKey: "",
     livekitApiSecret: "",
+    admobEnabled: true,
+    admobAppIdAndroid: "ca-app-pub-3940256099942544~3347511713",
+    admobAppIdIos: "ca-app-pub-3940256099942544~1458002511",
+    admobBannerAdUnitId: "ca-app-pub-3940256099942544/6300978111",
+    admobInterstitialAdUnitId: "ca-app-pub-3940256099942544/1033173712",
+    admobRewardedAdUnitId: "ca-app-pub-3940256099942544/5224354917",
+    admobRewardedInterstitialAdUnitId: "ca-app-pub-3940256099942544/5354046379",
+    rewardedChatCredits: 5,
+    rewardedCallMinutes: 2,
+    rewardedInterstitialChatCredits: 3,
+    rewardedInterstitialCallMinutes: 1,
     remoteThemeConfig: {
       version: 1,
       primaryColor: "#FF4B72",
@@ -589,6 +600,7 @@ export default function App() {
             { id: "dashboard", label: "Dashboard", icon: Activity },
             { id: "personas", label: "AI Personas", icon: Bot },
             { id: "subscriptions", label: "Subscriptions & Limits", icon: CreditCard },
+            { id: "admob", label: "AdMob & Ad Credits", icon: Smartphone },
             { id: "theme", label: "Remote Theme Studio", icon: Palette },
             { id: "flags", label: "Feature Flags", icon: Sliders },
             { id: "users", label: "User Directory", icon: Users },
@@ -646,6 +658,8 @@ export default function App() {
                 ? "AI Companion Personas Manager"
                 : activeTab === "flags"
                 ? "Dynamic Feature Flags & Switches"
+                : activeTab === "admob"
+                ? "Google AdMob & Freemium Rewards Studio"
                 : activeTab}
             </h1>
           </div>
@@ -1415,6 +1429,187 @@ export default function App() {
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: ADMOB & FREEMIUM REWARDS STUDIO */}
+          {activeTab === "admob" && (
+            <div className="space-y-6 max-w-4xl">
+              {/* Header Card */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-bold text-lg flex items-center gap-2">
+                    <Smartphone className="w-5 h-5 text-pink-500" /> Google AdMob & Freemium Ad Credits
+                  </h3>
+                  <p className="text-xs text-white/50 mt-1">
+                    Control AdMob App IDs, Ad Unit IDs, and bonus credits granted when users watch rewarded ads.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 bg-[#0E0C1C] px-4 py-2.5 rounded-xl border border-white/10 shrink-0">
+                  <span className="text-xs text-white/70 font-medium">Global AdMob:</span>
+                  <button
+                    onClick={() => setSysConfig({ ...sysConfig, admobEnabled: !sysConfig.admobEnabled })}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                      sysConfig.admobEnabled
+                        ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                        : "bg-red-500/20 text-red-400 border border-red-500/30"
+                    }`}
+                  >
+                    {sysConfig.admobEnabled ? "ENABLED" : "DISABLED"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Bonus Credits Configuration Card */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-6 space-y-5">
+                <div>
+                  <h4 className="font-bold text-sm text-pink-400">🎁 User Reward Credits (Granted on Ad Completion)</h4>
+                  <p className="text-xs text-white/50">Configure free messages and voice call minutes users receive per completed ad</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Rewarded Video */}
+                  <div className="bg-[#0E0C1C] border border-white/10 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                      <span className="text-xs font-semibold text-white">Full Rewarded Video Ad</span>
+                      <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-bold">Standard Ad</span>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-white/60 mb-1">Free Chat Messages Granted</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={sysConfig.rewardedChatCredits ?? 5}
+                        onChange={(e) => setSysConfig({ ...sysConfig, rewardedChatCredits: Number(e.target.value) })}
+                        className="w-full bg-[#161329] border border-white/10 rounded-lg px-3 py-2 text-xs font-bold text-pink-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-white/60 mb-1">Free Call Minutes Granted</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={sysConfig.rewardedCallMinutes ?? 2}
+                        onChange={(e) => setSysConfig({ ...sysConfig, rewardedCallMinutes: Number(e.target.value) })}
+                        className="w-full bg-[#161329] border border-white/10 rounded-lg px-3 py-2 text-xs font-bold text-purple-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Rewarded Interstitial */}
+                  <div className="bg-[#0E0C1C] border border-white/10 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                      <span className="text-xs font-semibold text-white">Quick Rewarded Interstitial</span>
+                      <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-bold">Quick Ad</span>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-white/60 mb-1">Free Chat Messages Granted</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={sysConfig.rewardedInterstitialChatCredits ?? 3}
+                        onChange={(e) => setSysConfig({ ...sysConfig, rewardedInterstitialChatCredits: Number(e.target.value) })}
+                        className="w-full bg-[#161329] border border-white/10 rounded-lg px-3 py-2 text-xs font-bold text-pink-400 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-white/60 mb-1">Free Call Minutes Granted</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={sysConfig.rewardedInterstitialCallMinutes ?? 1}
+                        onChange={(e) => setSysConfig({ ...sysConfig, rewardedInterstitialCallMinutes: Number(e.target.value) })}
+                        className="w-full bg-[#161329] border border-white/10 rounded-lg px-3 py-2 text-xs font-bold text-purple-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* AdMob IDs Card */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-6 space-y-4">
+                <div>
+                  <h4 className="font-bold text-sm text-pink-400">🆔 AdMob App & Unit IDs</h4>
+                  <p className="text-xs text-white/50">Overrides default test IDs with your production Google AdMob IDs dynamically</p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-white/70 mb-1">Android AdMob App ID</label>
+                    <input
+                      type="text"
+                      value={sysConfig.admobAppIdAndroid || ""}
+                      onChange={(e) => setSysConfig({ ...sysConfig, admobAppIdAndroid: e.target.value })}
+                      placeholder="ca-app-pub-xxxxxxxx~yyyyyyyy"
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-white/70 mb-1">iOS AdMob App ID</label>
+                    <input
+                      type="text"
+                      value={sysConfig.admobAppIdIos || ""}
+                      onChange={(e) => setSysConfig({ ...sysConfig, admobAppIdIos: e.target.value })}
+                      placeholder="ca-app-pub-xxxxxxxx~yyyyyyyy"
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-white/70 mb-1">Rewarded Video Ad Unit ID</label>
+                    <input
+                      type="text"
+                      value={sysConfig.admobRewardedAdUnitId || ""}
+                      onChange={(e) => setSysConfig({ ...sysConfig, admobRewardedAdUnitId: e.target.value })}
+                      placeholder="ca-app-pub-xxxxxxxx/yyyyyyyy"
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-white/70 mb-1">Rewarded Interstitial Ad Unit ID</label>
+                    <input
+                      type="text"
+                      value={sysConfig.admobRewardedInterstitialAdUnitId || ""}
+                      onChange={(e) => setSysConfig({ ...sysConfig, admobRewardedInterstitialAdUnitId: e.target.value })}
+                      placeholder="ca-app-pub-xxxxxxxx/yyyyyyyy"
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-white/70 mb-1">Banner Ad Unit ID (Optional)</label>
+                    <input
+                      type="text"
+                      value={sysConfig.admobBannerAdUnitId || ""}
+                      onChange={(e) => setSysConfig({ ...sysConfig, admobBannerAdUnitId: e.target.value })}
+                      placeholder="ca-app-pub-xxxxxxxx/yyyyyyyy"
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-white/70 mb-1">Interstitial Ad Unit ID (Optional)</label>
+                    <input
+                      type="text"
+                      value={sysConfig.admobInterstitialAdUnitId || ""}
+                      onChange={(e) => setSysConfig({ ...sysConfig, admobInterstitialAdUnitId: e.target.value })}
+                      placeholder="ca-app-pub-xxxxxxxx/yyyyyyyy"
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-white/5 flex justify-end">
+                  <button
+                    onClick={handleSaveConfig}
+                    className="px-6 py-3 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-pink-500/25 hover:opacity-90 transition"
+                  >
+                    <Save className="w-4 h-4" /> Save AdMob & Credit Settings
+                  </button>
                 </div>
               </div>
             </div>
