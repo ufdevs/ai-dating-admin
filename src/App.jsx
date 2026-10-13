@@ -27,6 +27,7 @@ import {
   Layers,
   Globe,
   RefreshCw,
+  Menu,
 } from "lucide-react";
 import {
   AreaChart,
@@ -75,6 +76,7 @@ export default function App() {
 
   // App navigation state
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Dashboard Stats state
   const [stats, setStats] = useState({
@@ -547,18 +549,39 @@ export default function App() {
         </div>
       )}
 
+      {/* Mobile Drawer Backdrop */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-black/70 z-40 md:hidden backdrop-blur-sm transition-opacity"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar Navigation */}
-      <aside className="w-64 bg-[#120F24] border-r border-white/5 flex flex-col shrink-0">
-        <div className="p-5 border-b border-white/5 flex items-center gap-3">
-          <div className="p-2.5 bg-gradient-to-tr from-pink-500 to-purple-600 rounded-xl shadow-lg shadow-pink-500/20">
-            <Bot className="w-6 h-6 text-white" />
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#120F24] border-r border-white/5 flex flex-col shrink-0 transition-transform duration-300 md:static md:translate-x-0 ${
+          isMobileMenuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+        }`}
+      >
+        <div className="p-5 border-b border-white/5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-gradient-to-tr from-pink-500 to-purple-600 rounded-xl shadow-lg shadow-pink-500/20">
+              <Bot className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h2 className="font-bold text-lg bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
+                AI Dating
+              </h2>
+              <p className="text-[11px] text-white/40 tracking-wider uppercase font-semibold">Admin Panel</p>
+            </div>
           </div>
-          <div>
-            <h2 className="font-bold text-lg bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
-              AI Dating
-            </h2>
-            <p className="text-[11px] text-white/40 tracking-wider uppercase font-semibold">Admin Panel</p>
-          </div>
+          <button
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="md:hidden p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/5 transition"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         <nav className="p-3 space-y-1.5 flex-1 overflow-y-auto">
@@ -578,7 +601,10 @@ export default function App() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setIsMobileMenuOpen(false);
+                }}
                 className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-xl text-sm font-medium transition ${
                   isActive
                     ? "bg-gradient-to-r from-pink-500/20 to-purple-600/20 text-pink-400 border border-pink-500/30"
@@ -603,10 +629,17 @@ export default function App() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-y-auto">
-        <header className="h-16 border-b border-white/5 flex items-center justify-between px-8 bg-[#0E0C1C]/60 backdrop-blur-md sticky top-0 z-30">
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-bold capitalize">
+      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        <header className="h-16 border-b border-white/5 flex items-center justify-between px-4 md:px-8 bg-[#0E0C1C]/60 backdrop-blur-md sticky top-0 z-30">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="md:hidden p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/70 transition"
+              aria-label="Open menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <h1 className="text-base md:text-lg font-bold capitalize truncate">
               {activeTab === "theme"
                 ? "Remote Dynamic Theme Studio"
                 : activeTab === "personas"
@@ -616,18 +649,18 @@ export default function App() {
                 : activeTab}
             </h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <button
               onClick={fetchData}
               disabled={loading}
               className="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-white/70 transition flex items-center gap-2 text-xs"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> <span className="hidden sm:inline">Refresh</span>
             </button>
           </div>
         </header>
 
-        <div className="p-8 flex-1">
+        <div className="p-4 md:p-8 flex-1">
           {/* TAB: DASHBOARD */}
           {activeTab === "dashboard" && (
             <div className="space-y-6">
