@@ -97,6 +97,8 @@ export default function App() {
     bio: "",
     gender: "female",
     avatarUrl: "",
+    photos: [],
+    relationshipDynamic: "romantic-partner",
     personalityTraits: ["sweet", "playful", "romantic"],
     interests: ["travel", "music", "movies"],
     voiceStyle: "sweet",
@@ -112,6 +114,7 @@ export default function App() {
   });
   const [newTrait, setNewTrait] = useState("");
   const [newInterest, setNewInterest] = useState("");
+  const [newPhotoUrl, setNewPhotoUrl] = useState("");
 
   // Subscriptions & System Config
   const [sysConfig, setSysConfig] = useState({
@@ -302,8 +305,15 @@ export default function App() {
   const handleSavePersona = async (e) => {
     e.preventDefault();
     try {
+      const photosArray = Array.isArray(personaForm.photos) && personaForm.photos.length > 0
+        ? personaForm.photos
+        : (personaForm.avatarUrl ? [personaForm.avatarUrl] : []);
+      const primaryAvatar = personaForm.avatarUrl || photosArray[0] || "";
+
       const payload = {
         ...personaForm,
+        avatarUrl: primaryAvatar,
+        photos: photosArray,
         supportedLanguages: Array.isArray(personaForm.language)
           ? personaForm.language
           : [personaForm.language || "en"],
@@ -338,13 +348,19 @@ export default function App() {
   };
 
   const openPersonaModal = (persona = null) => {
+    setNewPhotoUrl("");
     if (persona) {
       setEditingPersona(persona);
+      const personaPhotos = Array.isArray(persona.photos) && persona.photos.length > 0
+        ? persona.photos
+        : (persona.avatarUrl ? [persona.avatarUrl] : []);
       setPersonaForm({
         name: persona.name || "",
         bio: persona.bio || "",
         gender: persona.gender || "female",
-        avatarUrl: persona.avatarUrl || "",
+        avatarUrl: persona.avatarUrl || (personaPhotos[0] || ""),
+        photos: personaPhotos,
+        relationshipDynamic: persona.relationshipDynamic || "romantic-partner",
         personalityTraits: persona.personalityTraits || [],
         interests: persona.interests || [],
         voiceStyle: persona.voiceStyle || "sweet",
@@ -360,11 +376,14 @@ export default function App() {
       });
     } else {
       setEditingPersona(null);
+      const defaultAvatar = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80";
       setPersonaForm({
         name: "",
         bio: "",
         gender: "female",
-        avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500&auto=format&fit=crop&q=80",
+        avatarUrl: defaultAvatar,
+        photos: [defaultAvatar],
+        relationshipDynamic: "romantic-partner",
         personalityTraits: ["sweet", "playful", "romantic"],
         interests: ["travel", "music"],
         voiceStyle: "sweet",
@@ -724,7 +743,7 @@ export default function App() {
                             )}
                           </div>
                           <p className="text-xs text-white/50 capitalize">
-                            {p.gender} • Voice: {p.voiceStyle}
+                            {p.gender} • {p.photos?.length || 1} {(p.photos?.length || 1) === 1 ? "photo" : "photos"} • Voice: {p.voiceStyle}
                           </p>
                           <div className="flex flex-wrap gap-1 mt-2">
                             {(p.language || []).map((l) => (
@@ -1466,7 +1485,7 @@ export default function App() {
             </div>
 
             <form onSubmit={handleSavePersona} className="space-y-4 mt-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-xs text-white/70 mb-1">Persona Name</label>
                   <input
@@ -1491,17 +1510,119 @@ export default function App() {
                     <option value="non-binary">Non-binary</option>
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-xs text-white/70 mb-1">Dynamic</label>
+                  <select
+                    value={personaForm.relationshipDynamic || "romantic-partner"}
+                    onChange={(e) => setPersonaForm({ ...personaForm, relationshipDynamic: e.target.value })}
+                    className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs focus:outline-none"
+                  >
+                    <option value="romantic-partner">Romantic Partner</option>
+                    <option value="playful-flirt">Playful Flirt</option>
+                    <option value="intellectual-peer">Intellectual Peer</option>
+                    <option value="caring-listener">Caring Listener</option>
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs text-white/70 mb-1">Avatar Image URL</label>
+                <label className="block text-xs text-white/70 mb-1">Primary Cover / Avatar URL</label>
                 <input
                   type="text"
                   value={personaForm.avatarUrl}
-                  onChange={(e) => setPersonaForm({ ...personaForm, avatarUrl: e.target.value })}
+                  onChange={(e) => {
+                    const url = e.target.value;
+                    setPersonaForm((prev) => ({
+                      ...prev,
+                      avatarUrl: url,
+                      photos: prev.photos.includes(url) ? prev.photos : (url ? [url, ...prev.photos] : prev.photos),
+                    }));
+                  }}
                   placeholder="https://..."
                   className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-pink-500"
                 />
+              </div>
+
+              {/* Agent Multi-Photo Gallery for Profile */}
+              <div className="bg-[#0E0C1C] border border-white/10 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-semibold text-white/90">Agent Profile Gallery</span>
+                    <span className="text-[11px] text-pink-400 ml-2">({personaForm.photos?.length || 0} photos)</span>
+                  </div>
+                  <span className="text-[10px] text-white/40">Users can swipe through these photos in Discovery & Profile</span>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newPhotoUrl}
+                    onChange={(e) => setNewPhotoUrl(e.target.value)}
+                    placeholder="Enter additional photo URL..."
+                    className="flex-1 bg-[#161329] border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!newPhotoUrl.trim()) return;
+                      const trimmed = newPhotoUrl.trim();
+                      if (!personaForm.photos.includes(trimmed)) {
+                        setPersonaForm((prev) => ({
+                          ...prev,
+                          photos: [...prev.photos, trimmed],
+                          avatarUrl: prev.avatarUrl || trimmed,
+                        }));
+                      }
+                      setNewPhotoUrl("");
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-pink-500/20 text-pink-400 border border-pink-500/40 text-xs font-medium hover:bg-pink-500/30 transition-colors"
+                  >
+                    + Add Photo
+                  </button>
+                </div>
+
+                {personaForm.photos && personaForm.photos.length > 0 ? (
+                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 pt-1 max-h-36 overflow-y-auto">
+                    {personaForm.photos.map((photo, pIdx) => {
+                      const isCover = personaForm.avatarUrl === photo;
+                      return (
+                        <div key={pIdx} className="relative group rounded-lg overflow-hidden border border-white/10 aspect-square bg-black/40">
+                          <img src={photo} alt="" className="w-full h-full object-cover" />
+                          {isCover && (
+                            <span className="absolute top-1 left-1 bg-pink-500 text-[8px] px-1 py-0.5 rounded font-bold text-white shadow">
+                              Cover
+                            </span>
+                          )}
+                          <div className="absolute inset-0 bg-black/75 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 transition-opacity p-1">
+                            {!isCover && (
+                              <button
+                                type="button"
+                                onClick={() => setPersonaForm({ ...personaForm, avatarUrl: photo })}
+                                className="text-[9px] bg-white/20 hover:bg-white/40 text-white px-1.5 py-0.5 rounded w-full text-center"
+                              >
+                                Set Cover
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextPhotos = personaForm.photos.filter((_, i) => i !== pIdx);
+                                const nextAvatar = isCover ? (nextPhotos[0] || "") : personaForm.avatarUrl;
+                                setPersonaForm({ ...personaForm, photos: nextPhotos, avatarUrl: nextAvatar });
+                              }}
+                              className="text-[9px] bg-red-500/80 hover:bg-red-600 text-white px-1.5 py-0.5 rounded w-full text-center"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-white/40 italic">No photos added yet. Add photos above so users can explore the agent's full profile.</p>
+                )}
               </div>
 
               <div>
