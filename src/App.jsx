@@ -470,6 +470,20 @@ export default function App() {
     }
   };
 
+  // Review safety report / feedback
+  const handleReviewReport = async (reportId, newStatus) => {
+    try {
+      await api.post(`/admin/reports/${reportId}/review`, {
+        status: newStatus,
+        resolutionNotes: `Marked as ${newStatus} by admin`,
+      });
+      showToast(`Report marked as ${newStatus}!`);
+      fetchData();
+    } catch (err) {
+      showToast("Error updating report: " + err.message);
+    }
+  };
+
   // Mock analytics data for charts
   const activityData = [
     { name: "Mon", messages: 2400, calls: 400, activeUsers: 1200 },
@@ -1271,8 +1285,10 @@ export default function App() {
                     <tr className="border-b border-white/10 text-white/40 pb-2">
                       <th className="py-3">User</th>
                       <th>Gender</th>
-                      <th>Preferred Language</th>
+                      <th>Language</th>
                       <th>Subscription</th>
+                      <th>Usage (Today)</th>
+                      <th>Bonus Balance</th>
                       <th>Onboarded</th>
                       <th>Actions</th>
                     </tr>
@@ -1300,6 +1316,17 @@ export default function App() {
                           >
                             {u.subscriptionTier || "free"}
                           </span>
+                        </td>
+                        <td>
+                          <div className="text-[11px] space-y-0.5">
+                            <span className="text-white/80">💬 {u.dailyUsage?.textMessagesToday ?? u.dailyMessageCount ?? 0} msgs</span>
+                            <span className="text-white/40 block">🎙️ {u.dailyVoiceMessageCount ?? 0} voice | 📞 {u.dailyUsage?.callMinutesToday ?? 0}m</span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="text-[11px] text-pink-300">
+                            +{u.bonusChatMessages || 0} msgs | +{u.bonusCallMinutes || 0}m
+                          </div>
                         </td>
                         <td>{u.onboardingComplete ? "✅ Yes" : "⏳ Pending"}</td>
                         <td>
@@ -1379,6 +1406,136 @@ export default function App() {
           {/* TAB: MODERATION & TICKETS */}
           {activeTab === "moderation" && (
             <div className="space-y-6">
+              {/* 🛡️ Child Safety Reports & In-App Feedback Mechanism */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-bold text-base flex items-center gap-2">
+                      <Shield className="w-5 h-5 text-red-400" /> Child Safety Standards, CSAE Reports & In-App Feedback
+                    </h3>
+                    <p className="text-xs text-white/50 mt-1">
+                      Reports submitted via the Google Play Child Safety in-app feedback mechanism. Reviewed within 24h.
+                    </p>
+                  </div>
+                  <span className="px-3 py-1 bg-red-500/20 border border-red-500/30 text-red-300 rounded-full text-xs font-bold">
+                    {reports.filter((r) => r.status === "pending").length} Pending Review
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-white/10 text-white/40 pb-2">
+                        <th className="py-3">Type & Reason</th>
+                        <th>Reporter</th>
+                        <th>Target</th>
+                        <th>Description / Details</th>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {reports.length === 0 ? (
+                        <tr>
+                          <td colSpan="7" className="text-center py-6 text-white/40">
+                            No reports or safety submissions logged
+                          </td>
+                        </tr>
+                      ) : (
+                        reports.map((r) => {
+                          const isChildSafety =
+                            r.category === "child_safety_csae" ||
+                            r.reason === "child_safety_csae" ||
+                            (r.description && r.description.toLowerCase().includes("child"));
+
+                          return (
+                            <tr key={r._id} className="hover:bg-white/5">
+                              <td className="py-3">
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                    isChildSafety
+                                      ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                                      : r.category === "inappropriate_content"
+                                      ? "bg-amber-500/20 text-amber-300"
+                                      : r.category === "app_feedback"
+                                      ? "bg-blue-500/20 text-blue-300"
+                                      : "bg-purple-500/20 text-purple-300"
+                                  }`}
+                                >
+                                  {isChildSafety
+                                    ? "🛡️ Child Safety / CSAE"
+                                    : r.category || r.reason || "Safety Report"}
+                                </span>
+                              </td>
+                              <td>
+                                <div>
+                                  <p className="font-semibold">{r.reporterId?.name || "User"}</p>
+                                  <p className="text-[11px] text-white/40">{r.reporterId?.email || "—"}</p>
+                                </div>
+                              </td>
+                              <td>
+                                {r.personaId ? (
+                                  <span className="text-pink-300 font-medium">🤖 {r.personaId.name}</span>
+                                ) : r.reportedUserId ? (
+                                  <span>👤 {r.reportedUserId.name || r.reportedUserId.email}</span>
+                                ) : (
+                                  <span className="text-white/40">App System</span>
+                                )}
+                              </td>
+                              <td className="max-w-xs text-white/80">
+                                <p className="truncate" title={r.description || r.reason}>
+                                  {r.description || r.reason}
+                                </p>
+                              </td>
+                              <td className="text-white/40 whitespace-nowrap">
+                                {r.createdAt ? new Date(r.createdAt).toLocaleDateString() : "—"}
+                              </td>
+                              <td>
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                                    r.status === "resolved"
+                                      ? "bg-emerald-500/20 text-emerald-300"
+                                      : r.status === "rejected"
+                                      ? "bg-white/10 text-white/40"
+                                      : "bg-red-500/20 text-red-400 animate-pulse"
+                                  }`}
+                                >
+                                  {r.status || "pending"}
+                                </span>
+                              </td>
+                              <td>
+                                <div className="flex items-center gap-1.5">
+                                  {r.status !== "resolved" && (
+                                    <button
+                                      onClick={() => handleReviewReport(r._id, "resolved")}
+                                      className="px-2 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded text-[11px] font-medium transition"
+                                      title="Mark Resolved"
+                                    >
+                                      Resolve
+                                    </button>
+                                  )}
+                                  {r.status !== "rejected" && (
+                                    <button
+                                      onClick={() => handleReviewReport(r._id, "rejected")}
+                                      className="px-2 py-1 bg-white/10 hover:bg-white/20 text-white/60 rounded text-[11px] font-medium transition"
+                                      title="Dismiss"
+                                    >
+                                      Dismiss
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Support & Help Tickets */}
               <div className="bg-[#161329] border border-white/5 rounded-2xl p-6">
                 <h3 className="font-bold text-base mb-4">Support & Help Tickets</h3>
                 <div className="overflow-x-auto">
