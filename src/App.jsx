@@ -146,6 +146,9 @@ export default function App() {
     rewardedCallMinutes: 2,
     rewardedInterstitialChatCredits: 3,
     rewardedInterstitialCallMinutes: 1,
+    posthogEnabled: true,
+    posthogApiKey: "phc_CyBcBtqEBLik3rZqUukoUnGAgpQzd7dtqvkABi2EMTrA",
+    posthogHost: "https://eu.i.posthog.com",
     remoteThemeConfig: {
       version: 1,
       primaryColor: "#FF4B72",
@@ -1840,6 +1843,54 @@ export default function App() {
                     onChange={(e) => setSysConfig({ ...sysConfig, livekitApiSecret: e.target.value })}
                     className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
                   />
+                </div>
+
+                {/* POSTHOG ANALYTICS DYNAMIC CONFIG */}
+                <div className="p-4 rounded-xl bg-purple-950/20 border border-purple-500/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-xs text-purple-300 flex items-center gap-1.5">
+                        <Activity className="w-3.5 h-3.5 text-purple-400" /> PostHog Analytics & User Activity Tracing
+                      </h4>
+                      <p className="text-[10px] text-white/50">
+                        Controls client-side event tracking, user journeys, and session replays dynamically.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSysConfig({ ...sysConfig, posthogEnabled: !sysConfig.posthogEnabled })}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold transition ${
+                        sysConfig.posthogEnabled
+                          ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                          : "bg-white/5 text-white/40 border border-white/10"
+                      }`}
+                    >
+                      {sysConfig.posthogEnabled ? "ACTIVE" : "PAUSED"}
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-white/70 mb-1">PostHog Project Token (API Key)</label>
+                    <input
+                      type="text"
+                      value={sysConfig.posthogApiKey || ""}
+                      onChange={(e) => setSysConfig({ ...sysConfig, posthogApiKey: e.target.value })}
+                      placeholder="phc_..."
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2 text-xs font-mono focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-white/70 mb-1">PostHog Ingestion Host (Cloud Region)</label>
+                    <select
+                      value={sysConfig.posthogHost || "https://eu.i.posthog.com"}
+                      onChange={(e) => setSysConfig({ ...sysConfig, posthogHost: e.target.value })}
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2 text-xs font-mono focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="https://eu.i.posthog.com">EU Cloud (https://eu.i.posthog.com) - Project 309697</option>
+                      <option value="https://us.i.posthog.com">US Cloud (https://us.i.posthog.com)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
