@@ -28,6 +28,12 @@ import {
   Globe,
   RefreshCw,
   Menu,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  ArrowLeft,
+  ExternalLink,
 } from "lucide-react";
 import {
   AreaChart,
@@ -177,6 +183,23 @@ export default function App() {
   const [userTierFilter, setUserTierFilter] = useState("");
   const [userPage, setUserPage] = useState(1);
   const [userTotalPages, setUserTotalPages] = useState(1);
+  const [userToDelete, setUserToDelete] = useState(null); // Single user deletion modal
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+  const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false); // Bulk wipe modal
+  const [deleteAllConfirmText, setDeleteAllConfirmText] = useState("");
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+
+  // AI Conversations & Transcripts state
+  const [conversations, setConversations] = useState([]);
+  const [convSearch, setConvSearch] = useState("");
+  const [convPersonaFilter, setConvPersonaFilter] = useState("");
+  const [convUserFilter, setConvUserFilter] = useState("");
+  const [convUserName, setConvUserName] = useState("");
+  const [convPage, setConvPage] = useState(1);
+  const [convTotalPages, setConvTotalPages] = useState(1);
+  const [convTotal, setConvTotal] = useState(0);
+  const [activeSession, setActiveSession] = useState(null);
+  const [isLoadingSession, setIsLoadingSession] = useState(false);
 
   // Subscriptions list
   const [subscriptionsList, setSubscriptionsList] = useState([]);
@@ -284,6 +307,26 @@ export default function App() {
           setUsers(res.data.data.users || []);
           setUserTotalPages(res.data.data.totalPages || 1);
         }
+      } else if (activeTab === "conversations") {
+        const queryParams = new URLSearchParams({
+          page: convPage,
+          limit: 15,
+          search: convSearch,
+          personaId: convPersonaFilter,
+          userId: convUserFilter,
+        }).toString();
+        const [convRes, personaRes] = await Promise.all([
+          api.get(`/admin/conversations?${queryParams}`),
+          personas.length === 0 ? api.get("/admin/personas") : Promise.resolve(null),
+        ]);
+        if (convRes.data?.success) {
+          setConversations(convRes.data.data.sessions || []);
+          setConvTotalPages(convRes.data.data.totalPages || 1);
+          setConvTotal(convRes.data.data.total || 0);
+        }
+        if (personaRes?.data?.success) {
+          setPersonas(personaRes.data.data.personas || []);
+        }
       } else if (activeTab === "subscriptions") {
         const res = await api.get(`/admin/subscriptions?page=${subPage}`);
         if (res.data?.success) {
@@ -315,7 +358,98 @@ export default function App() {
     if (isLoggedIn) {
       fetchData();
     }
-  }, [isLoggedIn, activeTab, userPage, subPage, personaSearch]);
+  }, [
+    isLoggedIn,
+    activeTab,
+    userPage,
+    subPage,
+    personaSearch,
+    convPage,
+    convSearch,
+    convPersonaFilter,
+    convUserFilter,
+  ]);
+
+  // AI Conversations inspection and management
+  const handleViewTranscript = async (sessionId) => {
+    setIsLoadingSession(true);
+    try {
+      const res = await api.get(`/admin/conversations/${sessionId}`);
+      if (res.data?.success) {
+        setActiveSession(res.data.data);
+      }
+    } catch (err) {
+      showToast("Failed to load transcript: " + (err.response?.data?.message || err.message));
+    } finally {
+      setIsLoadingSession(false);
+    }
+  };
+
+  const handleDeleteConversation = async (sessionId) => {
+    if (!window.confirm("Are you sure you want to permanently delete this AI conversation thread?")) return;
+    try {
+      await api.delete(`/admin/conversations/${sessionId}`);
+      showToast("Conversation thread deleted 🗑️");
+      if (activeSession?._id === sessionId) setActiveSession(null);
+      fetchData();
+    } catch (err) {
+      showToast("Error deleting conversation: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleOpenConversationsForUser = (user) => {
+    setConvUserFilter(user._id);
+    setConvUserName(user.name || user.email || "Selected User");
+    setConvSearch("");
+    setConvPage(1);
+    setActiveTab("conversations");
+  };
+
+  const handleImprovePersonaFromChat = (persona) => {
+    if (!persona) return;
+    setActiveSession(null);
+    openPersonaModal(persona);
+    setActiveTab("personas");
+  };
+
+  // Single User Deletion (cascading all records)
+  const confirmDeleteSingleUser = async () => {
+    if (!userToDelete) return;
+    setIsDeletingUser(true);
+    try {
+      const res = await api.delete(`/admin/users/${userToDelete._id}`);
+      showToast(res.data?.message || `User ${userToDelete.name || userToDelete.email} and all data deleted.`);
+      setUserToDelete(null);
+      fetchData();
+    } catch (err) {
+      showToast("Error deleting user: " + (err.response?.data?.message || err.message));
+    } finally {
+      setIsDeletingUser(false);
+    }
+  };
+
+  // Bulk Wipe: Delete All Non-Admin Users and all related data
+  const handleDeleteAllUsers = async (e) => {
+    e.preventDefault();
+    if (deleteAllConfirmText !== "DELETE ALL USERS") {
+      showToast("Confirmation text must match 'DELETE ALL USERS' exactly.");
+      return;
+    }
+    setIsDeletingAll(true);
+    try {
+      const res = await api.post("/admin/users/delete-all", {
+        confirmKeyword: "DELETE ALL USERS",
+      });
+      showToast(res.data?.message || "All users and related data permanently deleted.");
+      setIsDeleteAllModalOpen(false);
+      setDeleteAllConfirmText("");
+      fetchData();
+    } catch (err) {
+      showToast("Error wiping users: " + (err.response?.data?.message || err.message));
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
 
   // Persona Save / Update
   const handleSavePersona = async (e) => {
@@ -615,12 +749,13 @@ export default function App() {
         <nav className="p-3 space-y-1.5 flex-1 overflow-y-auto">
           {[
             { id: "dashboard", label: "Dashboard", icon: Activity },
+            { id: "conversations", label: "AI Conversations", icon: MessageSquare },
+            { id: "users", label: "User Directory", icon: Users },
             { id: "personas", label: "AI Personas", icon: Bot },
             { id: "subscriptions", label: "Subscriptions & Limits", icon: CreditCard },
             { id: "admob", label: "AdMob & Ad Credits", icon: Smartphone },
             { id: "theme", label: "Remote Theme Studio", icon: Palette },
             { id: "flags", label: "Feature Flags", icon: Sliders },
-            { id: "users", label: "User Directory", icon: Users },
             { id: "broadcast", label: "Push Broadcast", icon: Bell },
             { id: "moderation", label: "Moderation & Tickets", icon: Shield },
             { id: "settings", label: "LLM & Voice APIs", icon: Key },
@@ -673,6 +808,10 @@ export default function App() {
                 ? "Remote Dynamic Theme Studio"
                 : activeTab === "personas"
                 ? "AI Companion Personas Manager"
+                : activeTab === "conversations"
+                ? "User AI Conversations & Dialogue Improvement"
+                : activeTab === "users"
+                ? "User Directory & Account Management"
                 : activeTab === "flags"
                 ? "Dynamic Feature Flags & Switches"
                 : activeTab === "admob"
@@ -755,6 +894,271 @@ export default function App() {
                   </ResponsiveContainer>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* TAB: AI CONVERSATIONS & THREADS */}
+          {activeTab === "conversations" && (
+            <div className="space-y-6">
+              {/* Header / Filter Toolbar */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-5 space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-bold text-base flex items-center gap-2">
+                      <MessageSquare className="w-5 h-5 text-pink-400" /> User AI Conversation Threads
+                    </h3>
+                    <p className="text-xs text-white/50 mt-0.5">
+                      Inspect complete conversational dialogue transcripts between users and AI companions to evaluate responses, detect issues, and refine system prompts.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="px-3 py-1.5 bg-pink-500/10 text-pink-300 border border-pink-500/20 rounded-xl font-medium">
+                      Total Threads: {convTotal}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Filter Controls */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-white/5">
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-3 text-white/40" />
+                    <input
+                      type="text"
+                      placeholder="Search messages, user name, email..."
+                      value={convSearch}
+                      onChange={(e) => {
+                        setConvSearch(e.target.value);
+                        setConvPage(1);
+                      }}
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-pink-500"
+                    />
+                  </div>
+
+                  <div>
+                    <select
+                      value={convPersonaFilter}
+                      onChange={(e) => {
+                        setConvPersonaFilter(e.target.value);
+                        setConvPage(1);
+                      }}
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500"
+                    >
+                      <option value="">All Companion Personas</option>
+                      {personas.map((p) => (
+                        <option key={p._id} value={p._id}>
+                          {p.name} ({p.gender || "companion"})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2 flex items-center justify-between gap-2">
+                    {convUserFilter ? (
+                      <div className="flex items-center gap-2 bg-purple-500/20 border border-purple-500/30 px-3 py-1.5 rounded-xl text-xs text-purple-300 w-full justify-between">
+                        <span className="truncate">
+                          Filtered by user: <strong>{convUserName}</strong>
+                        </span>
+                        <button
+                          onClick={() => {
+                            setConvUserFilter("");
+                            setConvUserName("");
+                            setConvPage(1);
+                          }}
+                          className="text-white/60 hover:text-white p-0.5 rounded hover:bg-white/10"
+                          title="Clear user filter"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-white/40 italic">
+                        Viewing conversations across all users
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setConvSearch("");
+                        setConvPersonaFilter("");
+                        setConvUserFilter("");
+                        setConvUserName("");
+                        setConvPage(1);
+                        fetchData();
+                      }}
+                      className="px-3 py-2 bg-white/5 hover:bg-white/10 text-white/70 rounded-xl text-xs shrink-0 transition"
+                    >
+                      Reset Filters
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Conversations List */}
+              {conversations.length === 0 ? (
+                <div className="bg-[#161329] border border-white/5 rounded-2xl p-12 text-center space-y-3">
+                  <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center mx-auto text-white/40">
+                    <MessageSquare className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-sm font-semibold">No Conversation Threads Found</h4>
+                  <p className="text-xs text-white/50 max-w-sm mx-auto">
+                    No conversations match the current filter or users have not engaged with companions yet.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-[#161329] border border-white/5 rounded-2xl overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-white/10 text-white/40 bg-[#120F24]/50">
+                          <th className="py-3.5 px-4">User</th>
+                          <th>AI Companion</th>
+                          <th>Messages</th>
+                          <th>Latest Snippet</th>
+                          <th>Last Activity</th>
+                          <th className="text-right px-4">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {conversations.map((c) => {
+                          const user = c.user || {};
+                          const persona = c.persona || {};
+                          const lastMsg = c.lastMessage;
+                          return (
+                            <tr key={c._id} className="hover:bg-white/5 transition">
+                              <td className="py-3.5 px-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-[11px] font-bold uppercase shrink-0">
+                                    {(user.name || user.email || "U").slice(0, 2)}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-white truncate max-w-[150px]">
+                                      {user.name || "Anonymous User"}
+                                    </p>
+                                    <p className="text-[11px] text-white/40 truncate max-w-[150px]">{user.email}</p>
+                                    <span
+                                      className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase mt-0.5 ${
+                                        user.subscriptionTier === "premium"
+                                          ? "text-amber-400 bg-amber-500/10"
+                                          : user.subscriptionTier === "basic"
+                                          ? "text-blue-400 bg-blue-500/10"
+                                          : "text-white/40 bg-white/5"
+                                      }`}
+                                    >
+                                      {user.subscriptionTier || "free"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="flex items-center gap-2.5">
+                                  <img
+                                    src={persona.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
+                                    alt={persona.name}
+                                    className="w-8 h-8 rounded-full object-cover border"
+                                    style={{ borderColor: persona.accentColor || "#FF4B72" }}
+                                  />
+                                  <div>
+                                    <p className="font-semibold text-white">{persona.name || "Unnamed Persona"}</p>
+                                    <p className="text-[10px] text-white/40">
+                                      {persona.voiceStyle || "sweet"} • {persona.openrouterModel ? persona.openrouterModel.split("/").pop() : "Llama"}
+                                    </p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="text-[11px] space-y-0.5">
+                                  <span className="font-semibold text-white">{c.messageCount} total msgs</span>
+                                  {c.voiceMessageCount > 0 && (
+                                    <span className="text-[10px] text-white/40 block">
+                                      🎙️ {c.voiceMessageCount} voice
+                                    </span>
+                                  )}
+                                  <span className="text-[9px] text-white/30 uppercase block">Lang: {c.language}</span>
+                                </div>
+                              </td>
+                              <td className="max-w-xs">
+                                {lastMsg ? (
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5 text-[10px]">
+                                      <span
+                                        className={`px-1.5 py-0.2 rounded font-bold uppercase text-[8.5px] ${
+                                          lastMsg.role === "user"
+                                            ? "bg-pink-500/20 text-pink-400"
+                                            : "bg-purple-500/20 text-purple-400"
+                                        }`}
+                                      >
+                                        {lastMsg.role}
+                                      </span>
+                                      {lastMsg.inputSource && lastMsg.inputSource !== "text" && (
+                                        <span className="text-[9px] text-white/40 bg-white/5 px-1 rounded">
+                                          {lastMsg.inputSource}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-white/70 line-clamp-2 italic">
+                                      "{lastMsg.content}"
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <span className="text-white/30 text-[11px] italic">No messages yet</span>
+                                )}
+                              </td>
+                              <td>
+                                <div className="text-[11px] text-white/60 flex items-center gap-1.5">
+                                  <Clock className="w-3 h-3 text-white/30 shrink-0" />
+                                  <span>{c.lastActivityAt ? new Date(c.lastActivityAt).toLocaleString() : "Recently"}</span>
+                                </div>
+                              </td>
+                              <td className="py-3.5 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <button
+                                    onClick={() => handleViewTranscript(c._id)}
+                                    className="px-2.5 py-1.5 bg-gradient-to-r from-pink-500/20 to-purple-600/20 hover:from-pink-500/30 hover:to-purple-600/30 text-pink-300 border border-pink-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" /> Transcript
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteConversation(c._id)}
+                                    className="p-1.5 text-white/40 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
+                                    title="Delete conversation thread"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  {convTotalPages > 1 && (
+                    <div className="p-4 border-t border-white/5 flex items-center justify-between text-xs">
+                      <span className="text-white/50">
+                        Page {convPage} of {convTotalPages} ({convTotal} conversations)
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          disabled={convPage <= 1}
+                          onClick={() => setConvPage((p) => Math.max(1, p - 1))}
+                          className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                        </button>
+                        <button
+                          disabled={convPage >= convTotalPages}
+                          onClick={() => setConvPage((p) => Math.min(convTotalPages, p + 1))}
+                          className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                        >
+                          Next <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -1264,14 +1668,20 @@ export default function App() {
                     type="text"
                     placeholder="Search users by name or email..."
                     value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
+                    onChange={(e) => {
+                      setUserSearch(e.target.value);
+                      setUserPage(1);
+                    }}
                     className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-xs focus:outline-none focus:border-pink-500"
                   />
                 </div>
                 <div className="flex items-center gap-2">
                   <select
                     value={userTierFilter}
-                    onChange={(e) => setUserTierFilter(e.target.value)}
+                    onChange={(e) => {
+                      setUserTierFilter(e.target.value);
+                      setUserPage(1);
+                    }}
                     className="bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2 text-xs focus:outline-none"
                   >
                     <option value="">All Tiers</option>
@@ -1279,6 +1689,16 @@ export default function App() {
                     <option value="basic">Basic</option>
                     <option value="premium">Premium</option>
                   </select>
+                  <button
+                    onClick={() => {
+                      setDeleteAllConfirmText("");
+                      setIsDeleteAllModalOpen(true);
+                    }}
+                    className="px-3.5 py-2 bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shrink-0 shadow-sm"
+                    title="Bulk purge all non-admin users and their conversation data"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete All Users
+                  </button>
                 </div>
               </div>
 
@@ -1293,7 +1713,7 @@ export default function App() {
                       <th>Usage (Today)</th>
                       <th>Bonus Balance</th>
                       <th>Onboarded</th>
-                      <th>Actions</th>
+                      <th className="text-right pr-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -1332,23 +1752,64 @@ export default function App() {
                           </div>
                         </td>
                         <td>{u.onboardingComplete ? "✅ Yes" : "⏳ Pending"}</td>
-                        <td>
-                          <button
-                            onClick={() => handleToggleBlock(u._id)}
-                            className={`px-2.5 py-1 rounded text-[11px] font-semibold transition ${
-                              u.isBlocked
-                                ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
-                                : "bg-red-500/20 text-red-300 hover:bg-red-500/30"
-                            }`}
-                          >
-                            {u.isBlocked ? "Unblock" : "Block"}
-                          </button>
+                        <td className="text-right pr-2">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleOpenConversationsForUser(u)}
+                              className="px-2 py-1 bg-purple-500/20 hover:bg-purple-500/30 text-purple-300 border border-purple-500/30 rounded text-[11px] font-semibold transition flex items-center gap-1"
+                              title="Inspect AI chats for this user"
+                            >
+                              <MessageSquare className="w-3 h-3" /> Chats
+                            </button>
+                            <button
+                              onClick={() => handleToggleBlock(u._id)}
+                              className={`px-2 py-1 rounded text-[11px] font-semibold transition ${
+                                u.isBlocked
+                                  ? "bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30"
+                                  : "bg-white/5 text-white/60 hover:bg-white/10"
+                              }`}
+                            >
+                              {u.isBlocked ? "Unblock" : "Block"}
+                            </button>
+                            <button
+                              onClick={() => setUserToDelete(u)}
+                              className="p-1 text-white/40 hover:text-red-400 hover:bg-red-500/10 rounded transition"
+                              title="Delete user & all related data"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              {/* Users Pagination */}
+              {userTotalPages > 1 && (
+                <div className="pt-4 border-t border-white/5 flex items-center justify-between text-xs">
+                  <span className="text-white/50">
+                    Page {userPage} of {userTotalPages}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={userPage <= 1}
+                      onClick={() => setUserPage((p) => Math.max(1, p - 1))}
+                      className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                    </button>
+                    <button
+                      disabled={userPage >= userTotalPages}
+                      onClick={() => setUserPage((p) => Math.min(userTotalPages, p + 1))}
+                      className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                    >
+                      Next <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -2236,6 +2697,276 @@ export default function App() {
                 Send Resolution
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* FULL CONVERSATION TRANSCRIPT MODAL */}
+      {activeSession && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-6">
+          <div className="bg-[#141126] border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-4 md:p-5 border-b border-white/10 bg-[#161329] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <img
+                  src={activeSession.personaId?.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
+                  alt={activeSession.personaId?.name}
+                  className="w-11 h-11 rounded-2xl object-cover border-2 shrink-0"
+                  style={{ borderColor: activeSession.personaId?.accentColor || "#FF4B72" }}
+                />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-sm md:text-base text-white truncate">
+                      Chat with {activeSession.personaId?.name || "AI Companion"}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-pink-500/20 text-pink-300 border border-pink-500/30 shrink-0">
+                      {activeSession.messages?.length || 0} messages
+                    </span>
+                  </div>
+                  <p className="text-xs text-white/50 truncate">
+                    User: <strong className="text-white/80">{activeSession.userId?.name || activeSession.userId?.email || "User"}</strong> ({activeSession.userId?.email || "No email"}) • Tier: <span className="uppercase font-semibold text-pink-400">{activeSession.userId?.subscriptionTier || "free"}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => handleImprovePersonaFromChat(activeSession.personaId)}
+                  className="px-3.5 py-2 bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-90 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-pink-500/25 transition"
+                  title="Tune this companion's system prompt and model based on this transcript"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Tune & Improve AI Prompt
+                </button>
+                <button
+                  onClick={() => setActiveSession(null)}
+                  className="p-2 text-white/50 hover:text-white hover:bg-white/10 rounded-xl transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Persona Model & Prompt Bar */}
+            <div className="bg-[#0E0C1C] px-5 py-2.5 border-b border-white/5 flex flex-wrap items-center justify-between text-[11px] gap-2">
+              <div className="flex items-center gap-3 text-white/60">
+                <span>Model: <strong className="text-white">{activeSession.personaId?.openrouterModel || "meta-llama/llama-3.3-70b-instruct"}</strong></span>
+                <span>Voice: <strong className="text-white capitalize">{activeSession.personaId?.voiceStyle || "sweet"}</strong></span>
+                <span>Dynamic: <strong className="text-white capitalize">{activeSession.personaId?.relationshipDynamic || "romantic-partner"}</strong></span>
+              </div>
+              <div className="text-white/40">
+                Language: <strong className="text-white uppercase">{activeSession.language || "en"}</strong>
+              </div>
+            </div>
+
+            {/* Transcript Messages Container */}
+            <div className="p-4 md:p-6 overflow-y-auto flex-1 space-y-4 bg-[#0B0917]/80">
+              {activeSession.messages && activeSession.messages.length > 0 ? (
+                activeSession.messages.map((msg, index) => {
+                  const isUser = msg.role === "user";
+                  return (
+                    <div
+                      key={msg._id || index}
+                      className={`flex gap-3 max-w-[85%] ${isUser ? "ml-auto flex-row-reverse" : "mr-auto"}`}
+                    >
+                      {/* Avatar */}
+                      <div className="shrink-0 mt-1">
+                        {isUser ? (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-[10px] font-bold text-white uppercase shadow-md">
+                            {(activeSession.userId?.name || "U").slice(0, 2)}
+                          </div>
+                        ) : (
+                          <img
+                            src={activeSession.personaId?.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
+                            alt="Companion"
+                            className="w-8 h-8 rounded-full object-cover border shadow-md"
+                            style={{ borderColor: activeSession.personaId?.accentColor || "#FF4B72" }}
+                          />
+                        )}
+                      </div>
+
+                      {/* Message Bubble */}
+                      <div className="space-y-1 min-w-0">
+                        <div className={`flex items-center gap-2 text-[10px] text-white/40 ${isUser ? "justify-end" : "justify-start"}`}>
+                          <span className="font-semibold text-white/60">
+                            {isUser ? (activeSession.userId?.name || "User") : (activeSession.personaId?.name || "Companion")}
+                          </span>
+                          {msg.inputSource && msg.inputSource !== "text" && (
+                            <span className="bg-white/10 text-white/70 px-1.5 py-0.2 rounded text-[9px]">
+                              {msg.inputSource}
+                            </span>
+                          )}
+                          <span>{msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}</span>
+                        </div>
+
+                        <div
+                          className={`p-3.5 rounded-2xl text-xs md:text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                            isUser
+                              ? "bg-gradient-to-tr from-pink-600 to-purple-600 text-white rounded-tr-none shadow-lg shadow-pink-600/20"
+                              : "bg-[#1B1733] border border-white/10 text-white/90 rounded-tl-none shadow-lg"
+                          }`}
+                        >
+                          {msg.content}
+                          {msg.reaction && (
+                            <span className="inline-block ml-2 text-sm">{msg.reaction}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-12 text-white/40 text-xs">
+                  This conversation thread has no messages yet.
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-white/10 bg-[#161329] flex items-center justify-between">
+              <button
+                onClick={() => handleDeleteConversation(activeSession._id)}
+                className="px-3.5 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-xs font-semibold flex items-center gap-2 transition"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Delete Entire Thread
+              </button>
+              <button
+                onClick={() => setActiveSession(null)}
+                className="px-5 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-semibold transition"
+              >
+                Close Transcript
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SINGLE USER DELETE CONFIRMATION MODAL */}
+      {userToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#161329] border border-red-500/30 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-400">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-white">Delete User & Related Data?</h3>
+                <p className="text-xs text-white/50">This action cannot be undone.</p>
+              </div>
+            </div>
+
+            <div className="bg-[#0E0C1C] border border-white/5 rounded-xl p-3.5 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-white/40">User Name:</span>
+                <span className="font-semibold text-white">{userToDelete.name || "Anonymous User"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/40">Email:</span>
+                <span className="text-white">{userToDelete.email}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/40">Subscription:</span>
+                <span className="uppercase font-semibold text-pink-400">{userToDelete.subscriptionTier || "free"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-white/40">User ID:</span>
+                <span className="font-mono text-[10px] text-white/60">{userToDelete._id}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-red-300/90 leading-relaxed bg-red-500/10 p-3 rounded-xl border border-red-500/20">
+              ⚠️ Deleting this user will permanently erase their profile, all AI conversation threads, messages, voice logs, custom companion configs, and subscriptions.
+            </p>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setUserToDelete(null)}
+                disabled={isDeletingUser}
+                className="px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-semibold transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteSingleUser}
+                disabled={isDeletingUser}
+                className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-lg shadow-red-600/30 transition disabled:opacity-50 flex items-center gap-2"
+              >
+                {isDeletingUser ? "Deleting..." : "Permanently Delete User"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BULK DELETE ALL USERS CONFIRMATION MODAL */}
+      {isDeleteAllModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#181022] border-2 border-red-500/50 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-red-600/20 border border-red-500/40 rounded-xl text-red-400">
+                <AlertTriangle className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg text-red-400">DANGER ZONE: Wipe All Users</h3>
+                <p className="text-xs text-white/50">Bulk purge non-admin user directory & conversation history</p>
+              </div>
+            </div>
+
+            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-xs text-white/80 space-y-2 leading-relaxed">
+              <p className="font-semibold text-red-300">
+                You are about to delete ALL non-admin users and every related record across the entire platform:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-white/70 pl-1 text-[11px]">
+                <li>All user accounts, profiles, and credentials</li>
+                <li>All AI chat sessions, messages, and dialogue transcripts</li>
+                <li>All voice session metadata and call history</li>
+                <li>All user custom partner configurations and preferences</li>
+                <li>All subscriptions, notifications, and support tickets</li>
+              </ul>
+              <p className="text-[11px] text-emerald-400 pt-1">
+                ✓ Active admin accounts are protected and will NOT be deleted.
+              </p>
+            </div>
+
+            <form onSubmit={handleDeleteAllUsers} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-white/80 mb-1.5">
+                  Type <span className="font-mono text-red-400 select-all font-bold">DELETE ALL USERS</span> to confirm:
+                </label>
+                <input
+                  type="text"
+                  value={deleteAllConfirmText}
+                  onChange={(e) => setDeleteAllConfirmText(e.target.value)}
+                  placeholder="DELETE ALL USERS"
+                  className="w-full bg-[#0E0C1C] border border-red-500/40 rounded-xl px-4 py-3 text-xs font-mono text-white focus:outline-none focus:border-red-500"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteAllModalOpen(false);
+                    setDeleteAllConfirmText("");
+                  }}
+                  disabled={isDeletingAll}
+                  className="px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-semibold transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={deleteAllConfirmText !== "DELETE ALL USERS" || isDeletingAll}
+                  className="px-6 py-2.5 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 text-white rounded-xl text-xs font-bold shadow-lg shadow-red-600/30 transition disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {isDeletingAll ? "Wiping Database..." : "Confirm & Delete All Users"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
