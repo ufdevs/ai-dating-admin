@@ -84,14 +84,21 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Dashboard Stats state
+  // Dashboard Stats state (DAU, WAU, MAU, Retention)
   const [stats, setStats] = useState({
     totalUsers: 0,
     activeSubscribers: 0,
     totalPersonas: 0,
     totalSessions: 0,
     totalCalls: 0,
+    dau: 0,
+    wau: 0,
+    mau: 0,
+    stickinessRatio: 0,
+    newUsersToday: 0,
+    activeSessionsToday: 0,
     tierBreakdown: [],
+    activityTrend: [],
   });
 
   // Personas state
@@ -181,6 +188,7 @@ export default function App() {
   const [users, setUsers] = useState([]);
   const [userSearch, setUserSearch] = useState("");
   const [userTierFilter, setUserTierFilter] = useState("");
+  const [userActivityFilter, setUserActivityFilter] = useState(""); // dau, wau, mau, inactive
   const [userPage, setUserPage] = useState(1);
   const [userTotalPages, setUserTotalPages] = useState(1);
   const [userToDelete, setUserToDelete] = useState(null); // Single user deletion modal
@@ -188,6 +196,10 @@ export default function App() {
   const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false); // Bulk wipe modal
   const [deleteAllConfirmText, setDeleteAllConfirmText] = useState("");
   const [isDeletingAll, setIsDeletingAll] = useState(false);
+
+  // Vercel Cron & Auto-Trigger status
+  const [isTriggeringCron, setIsTriggeringCron] = useState(false);
+  const [cronJobStatus, setCronJobStatus] = useState(null);
 
   // AI Conversations & Transcripts state
   const [conversations, setConversations] = useState([]);
@@ -294,14 +306,18 @@ export default function App() {
     setLoading(true);
     try {
       if (activeTab === "dashboard") {
-        const res = await api.get("/admin/dashboard-stats");
-        if (res.data?.success) setStats(res.data.data);
+        const [dashRes, cronRes] = await Promise.all([
+          api.get("/admin/dashboard-stats"),
+          api.get("/admin/cron/job-status").catch(() => null),
+        ]);
+        if (dashRes.data?.success) setStats(dashRes.data.data);
+        if (cronRes?.data?.success) setCronJobStatus(cronRes.data.data);
       } else if (activeTab === "personas") {
         const res = await api.get(`/admin/personas?search=${personaSearch}`);
         if (res.data?.success) setPersonas(res.data.data.personas || []);
       } else if (activeTab === "users") {
         const res = await api.get(
-          `/admin/users?page=${userPage}&search=${userSearch}&tier=${userTierFilter}`
+          `/admin/users?page=${userPage}&search=${userSearch}&tier=${userTierFilter}&activityStatus=${userActivityFilter}`
         );
         if (res.data?.success) {
           setUsers(res.data.data.users || []);
@@ -362,6 +378,8 @@ export default function App() {
     isLoggedIn,
     activeTab,
     userPage,
+    userTierFilter,
+    userActivityFilter,
     subPage,
     personaSearch,
     convPage,
@@ -369,6 +387,31 @@ export default function App() {
     convPersonaFilter,
     convUserFilter,
   ]);
+
+  // Vercel Cron & Auto-Trigger Execution
+  const handleTriggerAutoNotification = async () => {
+    setIsTriggeringCron(true);
+    try {
+      const res = await api.post("/admin/cron/trigger-notifications");
+      showToast(res.data?.message || "Auto-trigger companion check-in job finished! 🚀");
+      fetchCronJobStatus();
+    } catch (err) {
+      showToast("Auto-trigger error: " + (err.response?.data?.message || err.message));
+    } finally {
+      setIsTriggeringCron(false);
+    }
+  };
+
+  const fetchCronJobStatus = async () => {
+    try {
+      const res = await api.get("/admin/cron/job-status");
+      if (res.data?.success) {
+        setCronJobStatus(res.data.data);
+      }
+    } catch (err) {
+      console.warn("Failed to load cron status:", err.message);
+    }
+  };
 
   // AI Conversations inspection and management
   const handleViewTranscript = async (sessionId) => {
@@ -863,18 +906,125 @@ export default function App() {
                 })}
               </div>
 
+              {/* Active Users & Retention Metrics (DAU, WAU, MAU) */}
+              <div className="bg-gradient-to-r from-purple-900/30 via-pink-900/20 to-purple-900/30 border border-pink-500/20 rounded-2xl p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                      <Activity className="w-4 h-4 text-emerald-400" /> Real-time Active User Metrics & Retention (DAU / MAU)
+                    </h3>
+                    <p className="text-xs text-white/50">
+                      Tracks user engagement frequencies, retention stickiness, and daily active companion usage.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="flex items-center gap-1.5 px-3 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 rounded-xl font-semibold">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                      Live Retention Engine
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-[#120F24]/80 border border-white/5 rounded-xl p-3.5">
+                    <p className="text-[11px] text-white/50 font-medium flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400"></span> DAU (Daily Active)
+                    </p>
+                    <p className="text-xl font-bold mt-1 text-emerald-400">{stats.dau || 0}</p>
+                    <p className="text-[10px] text-white/40 mt-0.5">Active in last 24 hours</p>
+                  </div>
+
+                  <div className="bg-[#120F24]/80 border border-white/5 rounded-xl p-3.5">
+                    <p className="text-[11px] text-white/50 font-medium flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-400"></span> WAU (Weekly Active)
+                    </p>
+                    <p className="text-xl font-bold mt-1 text-amber-400">{stats.wau || 0}</p>
+                    <p className="text-[10px] text-white/40 mt-0.5">Active in last 7 days</p>
+                  </div>
+
+                  <div className="bg-[#120F24]/80 border border-white/5 rounded-xl p-3.5">
+                    <p className="text-[11px] text-white/50 font-medium flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-400"></span> MAU (Monthly Active)
+                    </p>
+                    <p className="text-xl font-bold mt-1 text-blue-400">{stats.mau || 0}</p>
+                    <p className="text-[10px] text-white/40 mt-0.5">Active in last 30 days</p>
+                  </div>
+
+                  <div className="bg-[#120F24]/80 border border-white/5 rounded-xl p-3.5">
+                    <p className="text-[11px] text-white/50 font-medium flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-pink-400"></span> Stickiness (DAU/MAU)
+                    </p>
+                    <p className="text-xl font-bold mt-1 text-pink-400">{stats.stickinessRatio || 0}%</p>
+                    <p className="text-[10px] text-white/40 mt-0.5">User retention ratio</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vercel Cron & Auto-Trigger Notification Engine Card */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-pink-400" /> Vercel Cron & Automated Engagement Engine
+                    </h3>
+                    <p className="text-xs text-white/50 mt-0.5">
+                      Automatically detects inactive companion users and dispatches personalized AI re-engagement push notifications.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleTriggerAutoNotification}
+                    disabled={isTriggeringCron}
+                    className="px-4 py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 hover:opacity-90 disabled:opacity-50 text-white rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-pink-500/25 transition shrink-0"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isTriggeringCron ? "animate-spin" : ""}`} />
+                    {isTriggeringCron ? "Dispatching Check-Ins..." : "Run Auto-Trigger Job Now"}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-white/5 text-xs">
+                  <div className="bg-[#0E0C1C] p-3 rounded-xl border border-white/5">
+                    <span className="text-white/40 block text-[11px]">Vercel Cron Schedule</span>
+                    <span className="font-mono font-semibold text-white">0 */4 * * * (Every 4h)</span>
+                  </div>
+                  <div className="bg-[#0E0C1C] p-3 rounded-xl border border-white/5">
+                    <span className="text-white/40 block text-[11px]">Vercel Endpoint Path</span>
+                    <span className="font-mono font-semibold text-pink-300">/api/v2/cron/auto-notifications</span>
+                  </div>
+                  <div className="bg-[#0E0C1C] p-3 rounded-xl border border-white/5">
+                    <span className="text-white/40 block text-[11px]">Eligible Inactive Users Now</span>
+                    <span className="font-semibold text-emerald-400">
+                      {cronJobStatus?.currentlyEligibleUsers ?? 0} users ready for check-in
+                    </span>
+                  </div>
+                </div>
+
+                {cronJobStatus?.lastRun && (
+                  <div className="bg-white/5 p-3 rounded-xl text-[11px] text-white/60 flex items-center justify-between">
+                    <span>
+                      Last Auto-Trigger: <strong>{new Date(cronJobStatus.lastRun.sentAt).toLocaleString()}</strong> ({cronJobStatus.lastRun.stats?.sent ?? 0} sent)
+                    </span>
+                    <span className="text-emerald-400 font-semibold">✓ Active & Running</span>
+                  </div>
+                )}
+              </div>
+
               {/* Chart */}
               <div className="bg-[#161329] border border-white/5 rounded-2xl p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="font-semibold text-base">Weekly Activity & AI Engagement</h3>
-                    <p className="text-xs text-white/40">Tokens, conversations, and minutes streamed</p>
+                    <h3 className="font-semibold text-base">7-Day Activity & Active Users Trend</h3>
+                    <p className="text-xs text-white/40">Daily Active Users (DAU), chat sessions, and voice calls</p>
                   </div>
                 </div>
                 <div className="h-72 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={activityData}>
+                    <AreaChart data={stats.activityTrend?.length ? stats.activityTrend : activityData}>
                       <defs>
+                        <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.8} />
+                          <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
+                        </linearGradient>
                         <linearGradient id="colorMsgs" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#FF4B72" stopOpacity={0.8} />
                           <stop offset="95%" stopColor="#FF4B72" stopOpacity={0} />
@@ -888,6 +1038,7 @@ export default function App() {
                       <XAxis dataKey="name" stroke="#ffffff40" />
                       <YAxis stroke="#ffffff40" />
                       <Tooltip contentStyle={{ backgroundColor: "#120F24", borderColor: "#ffffff20", borderRadius: 12 }} />
+                      <Area type="monotone" dataKey="activeUsers" stroke="#10B981" fillOpacity={1} fill="url(#colorUsers)" name="Active Users (DAU)" />
                       <Area type="monotone" dataKey="messages" stroke="#FF4B72" fillOpacity={1} fill="url(#colorMsgs)" name="Chat Messages" />
                       <Area type="monotone" dataKey="calls" stroke="#7C4DFF" fillOpacity={1} fill="url(#colorCalls)" name="Voice Calls" />
                     </AreaChart>
@@ -1677,12 +1828,26 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-2">
                   <select
+                    value={userActivityFilter}
+                    onChange={(e) => {
+                      setUserActivityFilter(e.target.value);
+                      setUserPage(1);
+                    }}
+                    className="bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500"
+                  >
+                    <option value="">All Activity Status</option>
+                    <option value="dau">🟢 Daily Active (DAU)</option>
+                    <option value="wau">🟡 Weekly Active (WAU)</option>
+                    <option value="mau">🔵 Monthly Active (MAU)</option>
+                    <option value="inactive">⚪ Inactive (&gt;30d)</option>
+                  </select>
+                  <select
                     value={userTierFilter}
                     onChange={(e) => {
                       setUserTierFilter(e.target.value);
                       setUserPage(1);
                     }}
-                    className="bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2 text-xs focus:outline-none"
+                    className="bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500"
                   >
                     <option value="">All Tiers</option>
                     <option value="free">Free</option>
@@ -1707,6 +1872,7 @@ export default function App() {
                   <thead>
                     <tr className="border-b border-white/10 text-white/40 pb-2">
                       <th className="py-3">User</th>
+                      <th>Activity Status</th>
                       <th>Gender</th>
                       <th>Language</th>
                       <th>Subscription</th>
@@ -1721,9 +1887,33 @@ export default function App() {
                       <tr key={u._id} className="hover:bg-white/5">
                         <td className="py-3">
                           <div>
-                            <p className="font-semibold">{u.name || "Anonymous User"}</p>
+                            <p className="font-semibold text-white">{u.name || "Anonymous User"}</p>
                             <p className="text-[11px] text-white/40">{u.email}</p>
+                            {u.lastActiveAt && (
+                              <p className="text-[10px] text-white/30 flex items-center gap-1 mt-0.5">
+                                <Clock className="w-2.5 h-2.5" /> {new Date(u.lastActiveAt).toLocaleDateString()}
+                              </p>
+                            )}
                           </div>
+                        </td>
+                        <td>
+                          {u.activityBadge === "DAU" ? (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> DAU
+                            </span>
+                          ) : u.activityBadge === "WAU" ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                              WAU
+                            </span>
+                          ) : u.activityBadge === "MAU" ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                              MAU
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/5 text-white/40">
+                              Inactive
+                            </span>
+                          )}
                         </td>
                         <td className="capitalize">{u.gender || "Unspecified"}</td>
                         <td className="uppercase">{u.preferredLanguage || "en"}</td>
