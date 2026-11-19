@@ -34,6 +34,10 @@ import {
   Clock,
   ArrowLeft,
   ExternalLink,
+  Send,
+  CheckCircle2,
+  XCircle,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   AreaChart,
@@ -224,10 +228,24 @@ export default function App() {
   const [replyTicketId, setReplyTicketId] = useState(null);
   const [replyText, setReplyText] = useState("");
 
-  // Push broadcast
+  // Push broadcast & Notification Management
   const [broadcastTitle, setBroadcastTitle] = useState("");
   const [broadcastMessage, setBroadcastMessage] = useState("");
+  const [broadcastImageUrl, setBroadcastImageUrl] = useState("");
+  const [broadcastTargetType, setBroadcastTargetType] = useState("all");
+  const [broadcastTargetFilter, setBroadcastTargetFilter] = useState("");
   const [broadcastTargetTier, setBroadcastTargetTier] = useState("all");
+  const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
+  const [notificationLogs, setNotificationLogs] = useState([]);
+  const [selectedNotification, setSelectedNotification] = useState(null);
+  const [recipientModalOpen, setRecipientModalOpen] = useState(false);
+  const [recipientsList, setRecipientsList] = useState([]);
+  const [recipientSearch, setRecipientSearch] = useState("");
+  const [recipientStatusFilter, setRecipientStatusFilter] = useState("all");
+  const [recipientsLoading, setRecipientsLoading] = useState(false);
+
+  // Ad Tracking Analytics
+  const [adAnalytics, setAdAnalytics] = useState(null);
 
   const [notificationMsg, setNotificationMsg] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -356,6 +374,12 @@ export default function App() {
         ]);
         if (repRes.data?.success) setReports(repRes.data.data.reports || []);
         if (helpRes.data?.success) setHelpRequests(helpRes.data.data.requests || []);
+      } else if (activeTab === "broadcast") {
+        const notifRes = await api.get("/admin/notifications?page=1&limit=30").catch(() => null);
+        if (notifRes?.data?.success) setNotificationLogs(notifRes.data.data.logs || []);
+      } else if (activeTab === "admob") {
+        const adRes = await api.get("/admin/ads/analytics").catch(() => null);
+        if (adRes?.data?.success) setAdAnalytics(adRes.data.data);
       }
 
       // Always fetch latest system config
@@ -604,21 +628,60 @@ export default function App() {
     }
   };
 
-  // Broadcast Notification
+  // Broadcast Notification & Delivery Inspection
   const handleSendBroadcast = async (e) => {
     e.preventDefault();
-    if (!broadcastTitle || !broadcastMessage) return;
+    if (!broadcastTitle.trim() || !broadcastMessage.trim()) return;
+    setIsSendingBroadcast(true);
     try {
-      await api.post("/admin/notifications/send", {
-        title: broadcastTitle,
-        message: broadcastMessage,
+      const res = await api.post("/admin/notifications/send", {
+        title: broadcastTitle.trim(),
+        message: broadcastMessage.trim(),
+        imageUrl: broadcastImageUrl.trim(),
+        targetType: broadcastTargetType,
+        targetFilter:
+          broadcastTargetType === "tier"
+            ? broadcastTargetTier
+            : broadcastTargetFilter.trim(),
         targetTier: broadcastTargetTier,
       });
-      showToast("Push notification dispatched to users! 📢");
+
+      const stats = res.data?.data?.stats;
+      showToast(
+        stats
+          ? `Dispatched! ${stats.sent} sent, ${stats.failed} failed, ${stats.noToken} no token 📢`
+          : "Push notification dispatched! 📢"
+      );
       setBroadcastTitle("");
       setBroadcastMessage("");
+      setBroadcastImageUrl("");
+      setBroadcastTargetFilter("");
+
+      // Refresh notification logs table
+      const notifRes = await api.get("/admin/notifications?page=1&limit=30").catch(() => null);
+      if (notifRes?.data?.success) setNotificationLogs(notifRes.data.data.logs || []);
     } catch (err) {
-      showToast("Error sending notification: " + err.message);
+      showToast("Error sending notification: " + (err.response?.data?.message || err.message));
+    } finally {
+      setIsSendingBroadcast(false);
+    }
+  };
+
+  const openRecipientsModal = async (notif) => {
+    setSelectedNotification(notif);
+    setRecipientModalOpen(true);
+    setRecipientsLoading(true);
+    setRecipientSearch("");
+    setRecipientStatusFilter("all");
+    try {
+      const res = await api.get(`/admin/notifications/${notif._id}/recipients`);
+      if (res.data?.success) {
+        setRecipientsList(res.data.data.recipients || []);
+      }
+    } catch (err) {
+      showToast("Error loading recipients: " + (err.response?.data?.message || err.message));
+    } finally {
+      setRecipientsLoading(false);
     }
   };
 
@@ -2003,57 +2066,391 @@ export default function App() {
             </div>
           )}
 
-          {/* TAB: PUSH BROADCAST */}
+          {/* TAB: PUSH NOTIFICATIONS & AUDIT CENTER */}
           {activeTab === "broadcast" && (
-            <div className="bg-[#161329] border border-white/5 rounded-2xl p-6 max-w-xl space-y-4">
-              <div>
-                <h3 className="font-bold text-base">Broadcast Push Notification</h3>
-                <p className="text-xs text-white/50">Dispatches real-time alerts to user devices via Firebase Cloud Messaging</p>
-              </div>
-
-              <form onSubmit={handleSendBroadcast} className="space-y-4">
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <label className="block text-xs text-white/70 mb-1">Target Segment</label>
-                  <select
-                    value={broadcastTargetTier}
-                    onChange={(e) => setBroadcastTargetTier(e.target.value)}
-                    className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs focus:outline-none"
-                  >
-                    <option value="all">All Registered Users</option>
-                    <option value="free">Free Tier Only</option>
-                    <option value="basic">Basic Subscribers Only</option>
-                    <option value="premium">Premium VIPs Only</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs text-white/70 mb-1">Notification Title</label>
-                  <input
-                    type="text"
-                    value={broadcastTitle}
-                    onChange={(e) => setBroadcastTitle(e.target.value)}
-                    placeholder="Sophia sent you a voice note 💌"
-                    className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-pink-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-white/70 mb-1">Message Content</label>
-                  <textarea
-                    rows={3}
-                    value={broadcastMessage}
-                    onChange={(e) => setBroadcastMessage(e.target.value)}
-                    placeholder="I was just wondering what you were doing right now... tap to listen!"
-                    className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-pink-500"
-                    required
-                  />
+                  <h3 className="font-bold text-lg flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-pink-500" /> Push Notification Management
+                  </h3>
+                  <p className="text-xs text-white/50 mt-1">
+                    Compose & dispatch targeted push notifications to user devices, track live delivery status, and inspect recipient logs.
+                  </p>
                 </div>
                 <button
-                  type="submit"
-                  className="w-full py-3 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 shadow-lg shadow-pink-500/25 hover:opacity-90 transition"
+                  onClick={() => {
+                    api.get("/admin/notifications?page=1&limit=30").then((res) => {
+                      if (res.data?.success) setNotificationLogs(res.data.data.logs || []);
+                      showToast("Notification logs refreshed! 🔄");
+                    });
+                  }}
+                  className="px-4 py-2 bg-[#0E0C1C] border border-white/10 hover:border-pink-500/50 rounded-xl text-xs font-medium flex items-center gap-2 text-white/80 hover:text-white transition"
                 >
-                  <Bell className="w-4 h-4" /> Send Broadcast Now
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh History
                 </button>
-              </form>
+              </div>
+
+              {/* Two Column Grid: Composer & Mobile Live Preview */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                {/* Column 1: Notification Composer (7 cols) */}
+                <div className="lg:col-span-7 bg-[#161329] border border-white/5 rounded-2xl p-6 space-y-5">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                    <h4 className="font-bold text-sm text-pink-400 flex items-center gap-2">
+                      <Send className="w-4 h-4" /> Compose Notification
+                    </h4>
+                    <span className="text-[11px] bg-pink-500/10 text-pink-400 border border-pink-500/20 px-2.5 py-0.5 rounded-full font-semibold">
+                      FCM Multicast Engine
+                    </span>
+                  </div>
+
+                  <form onSubmit={handleSendBroadcast} className="space-y-4">
+                    {/* Audience Target Selector */}
+                    <div>
+                      <label className="block text-xs font-semibold text-white/80 mb-1.5">
+                        Target Audience
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { id: "all", label: "All Users" },
+                          { id: "gender", label: "By Gender" },
+                          { id: "tier", label: "By Tier" },
+                          { id: "user", label: "Single User" },
+                        ].map((t) => (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => {
+                              setBroadcastTargetType(t.id);
+                              if (t.id === "all") setBroadcastTargetFilter("");
+                              else if (t.id === "gender") setBroadcastTargetFilter("female");
+                              else if (t.id === "tier") setBroadcastTargetTier("free");
+                            }}
+                            className={`py-2 px-3 rounded-xl text-xs font-semibold border transition ${
+                              broadcastTargetType === t.id
+                                ? "bg-pink-500/20 border-pink-500 text-pink-400 shadow-md shadow-pink-500/10"
+                                : "bg-[#0E0C1C] border-white/10 text-white/60 hover:text-white hover:border-white/20"
+                            }`}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Secondary Filters based on targetType */}
+                    {broadcastTargetType === "gender" && (
+                      <div>
+                        <label className="block text-xs text-white/70 mb-1">Select Gender</label>
+                        <select
+                          value={broadcastTargetFilter || "female"}
+                          onChange={(e) => setBroadcastTargetFilter(e.target.value)}
+                          className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500"
+                        >
+                          <option value="female">Women Only 👩</option>
+                          <option value="male">Men Only 👨</option>
+                          <option value="non-binary">Non-Binary Only ✨</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {broadcastTargetType === "tier" && (
+                      <div>
+                        <label className="block text-xs text-white/70 mb-1">Select Subscription Tier</label>
+                        <select
+                          value={broadcastTargetTier}
+                          onChange={(e) => setBroadcastTargetTier(e.target.value)}
+                          className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500"
+                        >
+                          <option value="free">Free Tier Users Only</option>
+                          <option value="basic">Basic Subscribers Only</option>
+                          <option value="premium">Premium VIPs Only</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {broadcastTargetType === "user" && (
+                      <div>
+                        <label className="block text-xs text-white/70 mb-1">Target User Email</label>
+                        <input
+                          type="email"
+                          value={broadcastTargetFilter}
+                          onChange={(e) => setBroadcastTargetFilter(e.target.value)}
+                          placeholder="e.g. user@aidating.com"
+                          className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500"
+                          required
+                        />
+                      </div>
+                    )}
+
+                    {/* Title */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-white/80 font-medium">Notification Title</label>
+                        <div className="flex gap-1 text-[10px] text-white/40">
+                          {["💌", "✨", "💕", "💋", "🔥"].map((emoji) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={() => setBroadcastTitle((t) => t + emoji)}
+                              className="hover:scale-125 transition px-1"
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <input
+                        type="text"
+                        value={broadcastTitle}
+                        onChange={(e) => setBroadcastTitle(e.target.value)}
+                        placeholder="e.g. Sophia left you a sweet voice note 💌"
+                        className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500"
+                        required
+                      />
+                    </div>
+
+                    {/* Message Body */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-xs text-white/80 font-medium">Message Content</label>
+                        <span className="text-[10px] text-white/40">{broadcastMessage.length}/500 chars</span>
+                      </div>
+                      <textarea
+                        rows={3}
+                        value={broadcastMessage}
+                        onChange={(e) => setBroadcastMessage(e.target.value)}
+                        placeholder="I was just wondering what you were doing right now... Tap to listen to what I said!"
+                        className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500"
+                        maxLength={500}
+                        required
+                      />
+                    </div>
+
+                    {/* Optional Image Banner URL */}
+                    <div>
+                      <label className="block text-xs text-white/80 font-medium mb-1 flex items-center gap-1.5">
+                        <ImageIcon className="w-3.5 h-3.5 text-white/50" /> Image Banner URL (Optional)
+                      </label>
+                      <input
+                        type="url"
+                        value={broadcastImageUrl}
+                        onChange={(e) => setBroadcastImageUrl(e.target.value)}
+                        placeholder="https://example.com/notification-banner.jpg"
+                        className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSendingBroadcast || !broadcastTitle.trim() || !broadcastMessage.trim()}
+                      className="w-full py-3 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-2 shadow-lg shadow-pink-500/25 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                    >
+                      {isSendingBroadcast ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" /> Dispatching to FCM...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4" /> Send Push Notification Now
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </div>
+
+                {/* Column 2: Live Phone Device Mockup Preview (5 cols) */}
+                <div className="lg:col-span-5 bg-[#161329] border border-white/5 rounded-2xl p-6 flex flex-col justify-between">
+                  <div>
+                    <h4 className="font-bold text-sm text-white/80 flex items-center gap-2 mb-2">
+                      <Smartphone className="w-4 h-4 text-purple-400" /> Device Notification Preview
+                    </h4>
+                    <p className="text-xs text-white/40 mb-6">
+                      Simulates real lock-screen & banner rendering on Android / iOS
+                    </p>
+
+                    {/* Phone Mockup Frame */}
+                    <div className="mx-auto max-w-[320px] bg-[#0E0C1C] border-2 border-white/10 rounded-[32px] p-3 shadow-2xl relative">
+                      {/* Speaker Notch */}
+                      <div className="w-24 h-4 bg-black/60 rounded-full mx-auto mb-4 flex items-center justify-center">
+                        <div className="w-2.5 h-2.5 rounded-full bg-white/20"></div>
+                      </div>
+
+                      {/* Mock Notification Banner Card */}
+                      <div className="bg-[#1C1733]/90 backdrop-blur-md border border-white/10 rounded-2xl p-3.5 shadow-lg space-y-2 text-left">
+                        {/* Notification App Header */}
+                        <div className="flex items-center justify-between text-[11px] text-white/60">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-[8px] font-bold text-white">
+                              AI
+                            </div>
+                            <span className="font-semibold text-white/90">Mingle AI Dating</span>
+                          </div>
+                          <span className="text-[10px] text-white/40">now</span>
+                        </div>
+
+                        {/* Title & Body */}
+                        <div>
+                          <p className="text-xs font-bold text-white line-clamp-1">
+                            {broadcastTitle || "Sophia sent you a message 💌"}
+                          </p>
+                          <p className="text-[11px] text-white/70 line-clamp-2 mt-0.5 leading-snug">
+                            {broadcastMessage || "Hey! I was thinking about you... tap to open our chat."}
+                          </p>
+                        </div>
+
+                        {/* Optional Attached Image Preview */}
+                        {broadcastImageUrl ? (
+                          <div className="mt-2 rounded-xl overflow-hidden max-h-32 border border-white/10">
+                            <img
+                              src={broadcastImageUrl}
+                              alt="Notification Banner"
+                              className="w-full h-24 object-cover"
+                              onError={(e) => (e.target.style.display = "none")}
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {/* Bottom Home Indicator */}
+                      <div className="w-28 h-1 bg-white/20 rounded-full mx-auto mt-8"></div>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 text-center text-[11px] text-white/40 border-t border-white/5 pt-3">
+                    Audience:{" "}
+                    <span className="text-pink-400 font-semibold">
+                      {broadcastTargetType === "all"
+                        ? "All Registered Devices"
+                        : broadcastTargetType === "gender"
+                        ? `Gender: ${broadcastTargetFilter || "female"}`
+                        : broadcastTargetType === "tier"
+                        ? `Tier: ${broadcastTargetTier}`
+                        : `User: ${broadcastTargetFilter || "specific"}`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notification History & Recipient Delivery Log Table */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/5 pb-4">
+                  <div>
+                    <h4 className="font-bold text-base flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-pink-500" /> Sent Notifications History & Delivery Logs
+                    </h4>
+                    <p className="text-xs text-white/50">
+                      Audit past dispatches, delivery success rates, and inspect the exact list of recipients who received each alert.
+                    </p>
+                  </div>
+                  <span className="text-xs text-white/60 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10 self-start sm:self-auto">
+                    Total Dispatches: <strong className="text-white">{notificationLogs.length}</strong>
+                  </span>
+                </div>
+
+                {notificationLogs.length === 0 ? (
+                  <div className="text-center py-12 text-white/40 text-xs">
+                    No push notifications have been dispatched yet. Compose and send your first announcement above!
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-white/5 text-white/40 font-semibold">
+                          <th className="pb-3 pr-4">Sent At</th>
+                          <th className="pb-3 px-4">Title & Message</th>
+                          <th className="pb-3 px-4">Target Audience</th>
+                          <th className="pb-3 px-4 text-center">Delivery Status</th>
+                          <th className="pb-3 pl-4 text-right">Recipients Audit</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {notificationLogs.map((log) => {
+                          const total = log.stats?.total || 0;
+                          const sent = log.stats?.sent || 0;
+                          const failed = log.stats?.failed || 0;
+                          const noToken = log.stats?.noToken || 0;
+
+                          return (
+                            <tr key={log._id} className="hover:bg-white/[0.02] transition">
+                              {/* Sent Date */}
+                              <td className="py-4 pr-4 whitespace-nowrap text-white/60">
+                                <div className="font-medium text-white/90">
+                                  {new Date(log.sentAt || log.createdAt).toLocaleDateString()}
+                                </div>
+                                <div className="text-[10px] text-white/40">
+                                  {new Date(log.sentAt || log.createdAt).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </div>
+                              </td>
+
+                              {/* Title & Body */}
+                              <td className="py-4 px-4 min-w-[240px]">
+                                <div className="font-bold text-white flex items-center gap-1.5">
+                                  {log.title}
+                                  {log.imageUrl ? (
+                                    <span className="text-[10px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded font-normal">
+                                      Image
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="text-white/60 text-[11px] line-clamp-1 mt-0.5">
+                                  {log.body}
+                                </div>
+                              </td>
+
+                              {/* Target */}
+                              <td className="py-4 px-4 whitespace-nowrap">
+                                <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-white/5 text-white/80 border border-white/10 uppercase">
+                                  {log.targetType === "all"
+                                    ? "All Users"
+                                    : log.targetType === "gender"
+                                    ? `Gender: ${log.targetFilter}`
+                                    : log.targetType === "tier"
+                                    ? `Tier: ${log.targetFilter || log.targetTier}`
+                                    : `Email: ${log.targetFilter}`}
+                                </span>
+                              </td>
+
+                              {/* Stats / Delivery */}
+                              <td className="py-4 px-4 text-center whitespace-nowrap">
+                                <div className="inline-flex items-center gap-2">
+                                  <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold">
+                                    ✓ {sent} Delivered
+                                  </span>
+                                  {failed > 0 && (
+                                    <span className="px-2 py-0.5 rounded-md bg-red-500/10 text-red-400 border border-red-500/20 text-[11px] font-bold">
+                                      ✕ {failed} Failed
+                                    </span>
+                                  )}
+                                  {noToken > 0 && (
+                                    <span className="px-2 py-0.5 rounded-md bg-gray-500/10 text-gray-400 border border-gray-500/20 text-[11px] font-bold">
+                                      {noToken} No Token
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* View Recipients Action */}
+                              <td className="py-4 pl-4 text-right whitespace-nowrap">
+                                <button
+                                  onClick={() => openRecipientsModal(log)}
+                                  className="px-3 py-1.5 bg-gradient-to-r from-pink-500/20 to-purple-600/20 hover:from-pink-500/30 hover:to-purple-600/30 border border-pink-500/40 text-pink-300 rounded-xl font-semibold text-xs flex items-center gap-1.5 ml-auto transition shadow-sm"
+                                >
+                                  <Users className="w-3.5 h-3.5" /> View Recipients
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -2271,6 +2668,98 @@ export default function App() {
                     {sysConfig.admobEnabled ? "ENABLED" : "DISABLED"}
                   </button>
                 </div>
+              </div>
+
+              {/* Ad Impression Analytics & Live Tracking */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-6 space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/5 pb-3">
+                  <div>
+                    <h4 className="font-bold text-sm text-pink-400 flex items-center gap-2">
+                      <Activity className="w-4 h-4" /> Live Ad Impression Tracking
+                    </h4>
+                    <p className="text-xs text-white/50">
+                      Real-time analytics for all rewarded video, interstitial, and banner ads rendered in the app.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      api.get("/admin/ads/analytics").then((res) => {
+                        if (res.data?.success) setAdAnalytics(res.data.data);
+                        showToast("Ad analytics refreshed! 📊");
+                      });
+                    }}
+                    className="px-3 py-1.5 bg-[#0E0C1C] border border-white/10 rounded-lg text-xs font-medium flex items-center gap-1.5 text-white/70 hover:text-white transition self-start sm:self-auto"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                  </button>
+                </div>
+
+                {/* KPI Stat Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-[#0E0C1C] border border-white/10 rounded-xl p-3.5">
+                    <span className="text-[11px] text-white/50 font-medium">Total Ads Served</span>
+                    <div className="text-xl font-extrabold text-white mt-1">
+                      {adAnalytics?.totalImpressions ?? 0}
+                    </div>
+                  </div>
+                  <div className="bg-[#0E0C1C] border border-white/10 rounded-xl p-3.5">
+                    <span className="text-[11px] text-white/50 font-medium">Today's Impressions</span>
+                    <div className="text-xl font-extrabold text-emerald-400 mt-1">
+                      {adAnalytics?.todayImpressions ?? 0}
+                    </div>
+                  </div>
+                  <div className="bg-[#0E0C1C] border border-white/10 rounded-xl p-3.5">
+                    <span className="text-[11px] text-white/50 font-medium">Rewarded Ads</span>
+                    <div className="text-xl font-extrabold text-pink-400 mt-1">
+                      {adAnalytics?.typeBreakdown?.find((t) => t._id === "rewarded")?.count ?? 0}
+                    </div>
+                  </div>
+                  <div className="bg-[#0E0C1C] border border-white/10 rounded-xl p-3.5">
+                    <span className="text-[11px] text-white/50 font-medium">Interstitials</span>
+                    <div className="text-xl font-extrabold text-purple-400 mt-1">
+                      {adAnalytics?.typeBreakdown?.find((t) => t._id === "interstitial" || t._id === "rewarded_interstitial")?.count ?? 0}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top Ad Viewers Table */}
+                {adAnalytics?.topViewers && adAnalytics.topViewers.length > 0 && (
+                  <div>
+                    <h5 className="text-xs font-bold text-white/80 mb-2">Top Ad Viewers & Engagers</h5>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-white/5 text-white/40">
+                            <th className="pb-2">User</th>
+                            <th className="pb-2">Tier</th>
+                            <th className="pb-2">Ads Watched</th>
+                            <th className="pb-2 text-right">Last Ad Watched</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {adAnalytics.topViewers.map((u, i) => (
+                            <tr key={u._id || i}>
+                              <td className="py-2.5 font-semibold text-white/90">
+                                {u.name || u.email || "User"}
+                              </td>
+                              <td className="py-2.5">
+                                <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-white/5 border border-white/10 text-white/70">
+                                  {u.subscriptionTier || "free"}
+                                </span>
+                              </td>
+                              <td className="py-2.5 font-bold text-pink-400">
+                                {u.adsWatchedCount} views
+                              </td>
+                              <td className="py-2.5 text-right text-white/50 text-[11px]">
+                                {u.lastAdWatchedAt ? new Date(u.lastAdWatchedAt).toLocaleDateString() : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Bonus Credits Configuration Card */}
@@ -3157,6 +3646,188 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* NOTIFICATION RECIPIENTS INSPECT MODAL ("WHO GOT NOTIFICATION") */}
+      {recipientModalOpen && selectedNotification && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 animate-in fade-in duration-150">
+          <div className="bg-[#141126] border border-white/10 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-white/10 bg-[#161329] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-pink-500/20 text-pink-400">
+                    <Bell className="w-4 h-4" />
+                  </span>
+                  <h3 className="font-bold text-base text-white truncate">
+                    {selectedNotification.title}
+                  </h3>
+                </div>
+                <p className="text-xs text-white/50 mt-1 line-clamp-1">
+                  "{selectedNotification.body}" • Dispatched {new Date(selectedNotification.sentAt || selectedNotification.createdAt).toLocaleString()}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+                    ✓ {selectedNotification.stats?.sent ?? 0} Delivered
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold">
+                    ✕ {selectedNotification.stats?.failed ?? 0} Failed
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setRecipientModalOpen(false);
+                    setSelectedNotification(null);
+                    setRecipientsList([]);
+                  }}
+                  className="p-1.5 rounded-lg text-white/50 hover:text-white hover:bg-white/10 transition ml-2"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="p-4 border-b border-white/5 bg-[#0E0C1C] flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-white/40 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search recipient by name, email, token..."
+                  value={recipientSearch}
+                  onChange={(e) => setRecipientSearch(e.target.value)}
+                  className="w-full bg-[#161329] border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-white/40 focus:outline-none focus:border-pink-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                {[
+                  { id: "all", label: "All" },
+                  { id: "delivered", label: "Delivered" },
+                  { id: "failed", label: "Failed" },
+                  { id: "no_token", label: "No Token" },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setRecipientStatusFilter(f.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                      recipientStatusFilter === f.id
+                        ? "bg-pink-500/20 border-pink-500/40 text-pink-400"
+                        : "bg-white/5 border-white/5 text-white/50 hover:text-white"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Recipients List Body */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {recipientsLoading ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3 text-white/50 text-xs">
+                  <RefreshCw className="w-6 h-6 animate-spin text-pink-500" />
+                  Fetching recipient delivery logs...
+                </div>
+              ) : (
+                (() => {
+                  const filtered = recipientsList.filter((r) => {
+                    const matchStatus =
+                      recipientStatusFilter === "all" || r.status === recipientStatusFilter;
+                    const q = recipientSearch.toLowerCase().trim();
+                    const matchQuery =
+                      !q ||
+                      (r.name && r.name.toLowerCase().includes(q)) ||
+                      (r.email && r.email.toLowerCase().includes(q)) ||
+                      (r.deviceToken && r.deviceToken.toLowerCase().includes(q));
+                    return matchStatus && matchQuery;
+                  });
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="text-center py-16 text-white/40 text-xs">
+                        No recipient logs match your filter criteria.
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead>
+                          <tr className="border-b border-white/5 text-white/40 font-semibold">
+                            <th className="pb-3 pr-4">User</th>
+                            <th className="pb-3 px-4">Email</th>
+                            <th className="pb-3 px-4">Device Token</th>
+                            <th className="pb-3 px-4">Status</th>
+                            <th className="pb-3 pl-4 text-right">Delivered At</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {filtered.map((r, i) => (
+                            <tr key={i} className="hover:bg-white/[0.02] transition">
+                              <td className="py-3 pr-4 whitespace-nowrap">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-xs font-bold text-white uppercase overflow-hidden shrink-0">
+                                    {r.avatarUrl ? (
+                                      <img src={r.avatarUrl} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                      (r.name || "U")[0]
+                                    )}
+                                  </div>
+                                  <span className="font-semibold text-white/90 truncate max-w-[140px]">
+                                    {r.name || "Anonymous User"}
+                                  </span>
+                                </div>
+                              </td>
+
+                              <td className="py-3 px-4 text-white/70 whitespace-nowrap">
+                                {r.email || "No Email"}
+                              </td>
+
+                              <td className="py-3 px-4 text-white/40 font-mono text-[10px] whitespace-nowrap">
+                                {r.deviceToken ? `${r.deviceToken.slice(0, 16)}...` : "None"}
+                              </td>
+
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                {r.status === "delivered" ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                    <CheckCircle2 className="w-3 h-3" /> Delivered
+                                  </span>
+                                ) : r.status === "failed" ? (
+                                  <span
+                                    title={r.error}
+                                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-500/15 text-red-400 border border-red-500/30 cursor-help"
+                                  >
+                                    <XCircle className="w-3 h-3" /> Failed
+                                  </span>
+                                ) : (
+                                  <span
+                                    title={r.error || "No active token registered"}
+                                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-gray-500/15 text-gray-400 border border-gray-500/30 cursor-help"
+                                  >
+                                    No Token
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="py-3 pl-4 text-right text-white/50 text-[11px] whitespace-nowrap">
+                                {r.deliveredAt ? new Date(r.deliveredAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()
+              )}
+            </div>
           </div>
         </div>
       )}
