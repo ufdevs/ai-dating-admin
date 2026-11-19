@@ -109,6 +109,9 @@ export default function App() {
   const [personas, setPersonas] = useState([]);
   const [personaSearch, setPersonaSearch] = useState("");
   const [personaGenderFilter, setPersonaGenderFilter] = useState("all");
+  const [personaPage, setPersonaPage] = useState(1);
+  const [personaTotalPages, setPersonaTotalPages] = useState(1);
+  const [personaTotal, setPersonaTotal] = useState(0);
   const [isPersonaModalOpen, setIsPersonaModalOpen] = useState(false);
   const [editingPersona, setEditingPersona] = useState(null);
   const [personaForm, setPersonaForm] = useState({
@@ -221,10 +224,19 @@ export default function App() {
   const [subscriptionsList, setSubscriptionsList] = useState([]);
   const [subPage, setSubPage] = useState(1);
   const [subTotalPages, setSubTotalPages] = useState(1);
+  const [subTotal, setSubTotal] = useState(0);
 
   // Moderation & Support
   const [reports, setReports] = useState([]);
+  const [reportsPage, setReportsPage] = useState(1);
+  const [reportsTotalPages, setReportsTotalPages] = useState(1);
+  const [reportsTotal, setReportsTotal] = useState(0);
+
   const [helpRequests, setHelpRequests] = useState([]);
+  const [helpPage, setHelpPage] = useState(1);
+  const [helpTotalPages, setHelpTotalPages] = useState(1);
+  const [helpTotal, setHelpTotal] = useState(0);
+
   const [replyTicketId, setReplyTicketId] = useState(null);
   const [replyText, setReplyText] = useState("");
 
@@ -237,9 +249,16 @@ export default function App() {
   const [broadcastTargetTier, setBroadcastTargetTier] = useState("all");
   const [isSendingBroadcast, setIsSendingBroadcast] = useState(false);
   const [notificationLogs, setNotificationLogs] = useState([]);
+  const [notifPage, setNotifPage] = useState(1);
+  const [notifTotalPages, setNotifTotalPages] = useState(1);
+  const [notifTotal, setNotifTotal] = useState(0);
+
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [recipientModalOpen, setRecipientModalOpen] = useState(false);
   const [recipientsList, setRecipientsList] = useState([]);
+  const [recipientPage, setRecipientPage] = useState(1);
+  const [recipientTotalPages, setRecipientTotalPages] = useState(1);
+  const [recipientTotal, setRecipientTotal] = useState(0);
   const [recipientSearch, setRecipientSearch] = useState("");
   const [recipientStatusFilter, setRecipientStatusFilter] = useState("all");
   const [recipientsLoading, setRecipientsLoading] = useState(false);
@@ -344,11 +363,15 @@ export default function App() {
         if (dashRes.data?.success) setStats(dashRes.data.data);
         if (cronRes?.data?.success) setCronJobStatus(cronRes.data.data);
       } else if (activeTab === "personas") {
-        const res = await api.get(`/admin/personas?search=${personaSearch}`);
-        if (res.data?.success) setPersonas(res.data.data.personas || []);
+        const res = await api.get(`/admin/personas?page=${personaPage}&limit=12&search=${personaSearch}`);
+        if (res.data?.success) {
+          setPersonas(res.data.data.personas || []);
+          setPersonaTotalPages(res.data.data.totalPages || 1);
+          setPersonaTotal(res.data.data.total || 0);
+        }
       } else if (activeTab === "users") {
         const res = await api.get(
-          `/admin/users?page=${userPage}&search=${userSearch}&tier=${userTierFilter}&activityStatus=${userActivityFilter}`
+          `/admin/users?page=${userPage}&limit=15&search=${userSearch}&tier=${userTierFilter}&activityStatus=${userActivityFilter}`
         );
         if (res.data?.success) {
           setUsers(res.data.data.users || []);
@@ -364,7 +387,7 @@ export default function App() {
         }).toString();
         const [convRes, personaRes] = await Promise.all([
           api.get(`/admin/conversations?${queryParams}`),
-          personas.length === 0 ? api.get("/admin/personas") : Promise.resolve(null),
+          personas.length === 0 ? api.get("/admin/personas?limit=100") : Promise.resolve(null),
         ]);
         if (convRes.data?.success) {
           setConversations(convRes.data.data.sessions || []);
@@ -375,21 +398,34 @@ export default function App() {
           setPersonas(personaRes.data.data.personas || []);
         }
       } else if (activeTab === "subscriptions") {
-        const res = await api.get(`/admin/subscriptions?page=${subPage}`);
+        const res = await api.get(`/admin/subscriptions?page=${subPage}&limit=15`);
         if (res.data?.success) {
           setSubscriptionsList(res.data.data.subscriptions || []);
           setSubTotalPages(res.data.data.totalPages || 1);
+          setSubTotal(res.data.data.total || 0);
         }
       } else if (activeTab === "moderation") {
         const [repRes, helpRes] = await Promise.all([
-          api.get("/admin/reports"),
-          api.get("/admin/help-requests"),
+          api.get(`/admin/reports?page=${reportsPage}&limit=15`),
+          api.get(`/admin/help-requests?page=${helpPage}&limit=15`),
         ]);
-        if (repRes.data?.success) setReports(repRes.data.data.reports || []);
-        if (helpRes.data?.success) setHelpRequests(helpRes.data.data.requests || []);
+        if (repRes.data?.success) {
+          setReports(repRes.data.data.reports || []);
+          setReportsTotalPages(repRes.data.data.totalPages || 1);
+          setReportsTotal(repRes.data.data.total || 0);
+        }
+        if (helpRes.data?.success) {
+          setHelpRequests(helpRes.data.data.requests || []);
+          setHelpTotalPages(helpRes.data.data.totalPages || 1);
+          setHelpTotal(helpRes.data.data.total || 0);
+        }
       } else if (activeTab === "broadcast") {
-        const notifRes = await api.get("/admin/notifications?page=1&limit=30").catch(() => null);
-        if (notifRes?.data?.success) setNotificationLogs(notifRes.data.data.logs || []);
+        const notifRes = await api.get(`/admin/notifications?page=${notifPage}&limit=15`).catch(() => null);
+        if (notifRes?.data?.success) {
+          setNotificationLogs(notifRes.data.data.logs || []);
+          setNotifTotalPages(notifRes.data.data.pagination?.totalPages || 1);
+          setNotifTotal(notifRes.data.data.pagination?.total || 0);
+        }
       } else if (activeTab === "admob") {
         const adRes = await api.get("/admin/ads/analytics").catch(() => null);
         if (adRes?.data?.success) setAdAnalytics(adRes.data.data);
@@ -421,11 +457,15 @@ export default function App() {
     userTierFilter,
     userActivityFilter,
     subPage,
+    personaPage,
     personaSearch,
     convPage,
     convSearch,
     convPersonaFilter,
     convUserFilter,
+    reportsPage,
+    helpPage,
+    notifPage,
   ]);
 
   // Vercel Cron & Auto-Trigger Execution
@@ -683,22 +723,36 @@ export default function App() {
     }
   };
 
-  const openRecipientsModal = async (notif) => {
-    setSelectedNotification(notif);
-    setRecipientModalOpen(true);
+  const fetchRecipients = async (notifId, page = 1, search = recipientSearch, status = recipientStatusFilter) => {
     setRecipientsLoading(true);
-    setRecipientSearch("");
-    setRecipientStatusFilter("all");
     try {
-      const res = await api.get(`/admin/notifications/${notif._id}/recipients`);
+      const q = new URLSearchParams({
+        page,
+        limit: 25,
+        search,
+        status,
+      }).toString();
+      const res = await api.get(`/admin/notifications/${notifId}/recipients?${q}`);
       if (res.data?.success) {
         setRecipientsList(res.data.data.recipients || []);
+        setRecipientPage(res.data.data.page || 1);
+        setRecipientTotalPages(res.data.data.totalPages || 1);
+        setRecipientTotal(res.data.data.totalRecipients || 0);
       }
     } catch (err) {
       showToast("Error loading recipients: " + (err.response?.data?.message || err.message));
     } finally {
       setRecipientsLoading(false);
     }
+  };
+
+  const openRecipientsModal = async (notif) => {
+    setSelectedNotification(notif);
+    setRecipientModalOpen(true);
+    setRecipientSearch("");
+    setRecipientStatusFilter("all");
+    setRecipientPage(1);
+    fetchRecipients(notif._id, 1, "", "all");
   };
 
   const fetchAdLogs = async () => {
@@ -1536,6 +1590,32 @@ export default function App() {
                   </div>
                 ))}
               </div>
+
+              {/* Personas Pagination */}
+              {personaTotalPages > 1 && (
+                <div className="pt-4 border-t border-white/5 flex items-center justify-between text-xs">
+                  <span className="text-white/50">
+                    Page <strong className="text-white">{personaPage}</strong> of{" "}
+                    <strong className="text-white">{personaTotalPages}</strong> ({personaTotal} total)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={personaPage <= 1}
+                      onClick={() => setPersonaPage((p) => Math.max(1, p - 1))}
+                      className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                    </button>
+                    <button
+                      disabled={personaPage >= personaTotalPages}
+                      onClick={() => setPersonaPage((p) => Math.min(personaTotalPages, p + 1))}
+                      className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                    >
+                      Next <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1725,6 +1805,32 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Subscriptions Pagination */}
+                {subTotalPages > 1 && (
+                  <div className="pt-4 mt-4 border-t border-white/5 flex items-center justify-between text-xs">
+                    <span className="text-white/50">
+                      Page <strong className="text-white">{subPage}</strong> of{" "}
+                      <strong className="text-white">{subTotalPages}</strong> ({subTotal} total)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={subPage <= 1}
+                        onClick={() => setSubPage((p) => Math.max(1, p - 1))}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                      </button>
+                      <button
+                        disabled={subPage >= subTotalPages}
+                        onClick={() => setSubPage((p) => Math.min(subTotalPages, p + 1))}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                      >
+                        Next <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2512,6 +2618,32 @@ export default function App() {
                     </table>
                   </div>
                 )}
+
+                {/* Broadcasts Pagination */}
+                {notifTotalPages > 1 && (
+                  <div className="pt-4 mt-4 border-t border-white/5 flex items-center justify-between text-xs">
+                    <span className="text-white/50">
+                      Page <strong className="text-white">{notifPage}</strong> of{" "}
+                      <strong className="text-white">{notifTotalPages}</strong> ({notifTotal} broadcasts)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={notifPage <= 1}
+                        onClick={() => setNotifPage((p) => Math.max(1, p - 1))}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                      </button>
+                      <button
+                        disabled={notifPage >= notifTotalPages}
+                        onClick={() => setNotifPage((p) => Math.min(notifTotalPages, p + 1))}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                      >
+                        Next <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2646,6 +2778,32 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Reports Pagination */}
+                {reportsTotalPages > 1 && (
+                  <div className="pt-4 mt-4 border-t border-white/5 flex items-center justify-between text-xs">
+                    <span className="text-white/50">
+                      Page <strong className="text-white">{reportsPage}</strong> of{" "}
+                      <strong className="text-white">{reportsTotalPages}</strong> ({reportsTotal} total)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={reportsPage <= 1}
+                        onClick={() => setReportsPage((p) => Math.max(1, p - 1))}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                      </button>
+                      <button
+                        disabled={reportsPage >= reportsTotalPages}
+                        onClick={() => setReportsPage((p) => Math.min(reportsTotalPages, p + 1))}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                      >
+                        Next <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Support & Help Tickets */}
@@ -2700,6 +2858,32 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Help Tickets Pagination */}
+                {helpTotalPages > 1 && (
+                  <div className="pt-4 mt-4 border-t border-white/5 flex items-center justify-between text-xs">
+                    <span className="text-white/50">
+                      Page <strong className="text-white">{helpPage}</strong> of{" "}
+                      <strong className="text-white">{helpTotalPages}</strong> ({helpTotal} total)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        disabled={helpPage <= 1}
+                        onClick={() => setHelpPage((p) => Math.max(1, p - 1))}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                      </button>
+                      <button
+                        disabled={helpPage >= helpTotalPages}
+                        onClick={() => setHelpPage((p) => Math.min(helpTotalPages, p + 1))}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg flex items-center gap-1 transition"
+                      >
+                        Next <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -4410,6 +4594,40 @@ export default function App() {
                     </div>
                   );
                 })()
+              )}
+
+              {/* Recipients Pagination */}
+              {recipientTotalPages > 1 && (
+                <div className="pt-3 mt-3 border-t border-white/5 flex items-center justify-between text-xs text-white/50">
+                  <span>
+                    Page <strong className="text-white">{recipientPage}</strong> of{" "}
+                    <strong className="text-white">{recipientTotalPages}</strong> ({recipientTotal} recipients)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={recipientPage <= 1}
+                      onClick={() => {
+                        const nextP = Math.max(1, recipientPage - 1);
+                        setRecipientPage(nextP);
+                        fetchRecipients(selectedNotification._id, nextP);
+                      }}
+                      className="px-2.5 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-40 rounded flex items-center gap-1"
+                    >
+                      <ChevronLeft className="w-3 h-3" /> Prev
+                    </button>
+                    <button
+                      disabled={recipientPage >= recipientTotalPages}
+                      onClick={() => {
+                        const nextP = Math.min(recipientTotalPages, recipientPage + 1);
+                        setRecipientPage(nextP);
+                        fetchRecipients(selectedNotification._id, nextP);
+                      }}
+                      className="px-2.5 py-1 bg-white/5 hover:bg-white/10 disabled:opacity-40 rounded flex items-center gap-1"
+                    >
+                      Next <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>
