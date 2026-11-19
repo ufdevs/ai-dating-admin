@@ -244,8 +244,21 @@ export default function App() {
   const [recipientStatusFilter, setRecipientStatusFilter] = useState("all");
   const [recipientsLoading, setRecipientsLoading] = useState(false);
 
-  // Ad Tracking Analytics
+  // Ad Tracking Analytics & Failure Logs
   const [adAnalytics, setAdAnalytics] = useState(null);
+  const [adLogsList, setAdLogsList] = useState([]);
+  const [adLogsPage, setAdLogsPage] = useState(1);
+  const [adLogsTotalPages, setAdLogsTotalPages] = useState(1);
+  const [adLogsTotal, setAdLogsTotal] = useState(0);
+  const [adLogsEventFilter, setAdLogsEventFilter] = useState("all");
+  const [adLogsProviderFilter, setAdLogsProviderFilter] = useState("all");
+  const [adLogsTypeFilter, setAdLogsTypeFilter] = useState("all");
+  const [adLogsErrorCodeFilter, setAdLogsErrorCodeFilter] = useState("all");
+  const [adLogsSearch, setAdLogsSearch] = useState("");
+  const [adDiagnostics, setAdDiagnostics] = useState(null);
+  const [selectedAdLog, setSelectedAdLog] = useState(null);
+  const [isAdLogModalOpen, setIsAdLogModalOpen] = useState(false);
+  const [isAdLogsLoading, setIsAdLogsLoading] = useState(false);
 
   const [notificationMsg, setNotificationMsg] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -380,6 +393,9 @@ export default function App() {
       } else if (activeTab === "admob") {
         const adRes = await api.get("/admin/ads/analytics").catch(() => null);
         if (adRes?.data?.success) setAdAnalytics(adRes.data.data);
+      } else if (activeTab === "adlogs") {
+        fetchAdLogs();
+        fetchAdDiagnostics();
       }
 
       // Always fetch latest system config
@@ -685,6 +701,49 @@ export default function App() {
     }
   };
 
+  const fetchAdLogs = async () => {
+    setIsAdLogsLoading(true);
+    try {
+      const query = new URLSearchParams({
+        page: adLogsPage,
+        limit: 30,
+        eventType: adLogsEventFilter,
+        provider: adLogsProviderFilter,
+        adType: adLogsTypeFilter,
+        errorCode: adLogsErrorCodeFilter,
+        search: adLogsSearch,
+      }).toString();
+      const res = await api.get(`/admin/ads/logs?${query}`);
+      if (res.data?.success) {
+        setAdLogsList(res.data.data.logs || []);
+        setAdLogsTotalPages(res.data.data.pagination?.totalPages || 1);
+        setAdLogsTotal(res.data.data.pagination?.total || 0);
+      }
+    } catch (err) {
+      console.warn("Failed fetching ad logs:", err.message);
+    } finally {
+      setIsAdLogsLoading(false);
+    }
+  };
+
+  const fetchAdDiagnostics = async () => {
+    try {
+      const res = await api.get("/admin/ads/diagnostics");
+      if (res.data?.success) {
+        setAdDiagnostics(res.data.data);
+      }
+    } catch (err) {
+      console.warn("Failed fetching ad diagnostics:", err.message);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoggedIn && activeTab === "adlogs") {
+      fetchAdLogs();
+      fetchAdDiagnostics();
+    }
+  }, [adLogsPage, adLogsEventFilter, adLogsProviderFilter, adLogsTypeFilter, adLogsErrorCodeFilter, activeTab]);
+
   // Toggle user block
   const handleToggleBlock = async (id) => {
     try {
@@ -860,6 +919,7 @@ export default function App() {
             { id: "personas", label: "AI Personas", icon: Bot },
             { id: "subscriptions", label: "Subscriptions & Limits", icon: CreditCard },
             { id: "admob", label: "AdMob & Ad Credits", icon: Smartphone },
+            { id: "adlogs", label: "Ad Telemetry & Failures", icon: AlertTriangle },
             { id: "theme", label: "Remote Theme Studio", icon: Palette },
             { id: "flags", label: "Feature Flags", icon: Sliders },
             { id: "broadcast", label: "Push Broadcast", icon: Bell },
@@ -922,6 +982,8 @@ export default function App() {
                 ? "Dynamic Feature Flags & Switches"
                 : activeTab === "admob"
                 ? "Google AdMob & Freemium Rewards Studio"
+                : activeTab === "adlogs"
+                ? "AdMob & Meta Mediation Failure Telemetry"
                 : activeTab}
             </h1>
           </div>
@@ -2915,6 +2977,528 @@ export default function App() {
             </div>
           )}
 
+          {/* TAB: AD TELEMETRY & FAILURE LOGS */}
+          {activeTab === "adlogs" && (
+            <div className="space-y-6">
+              {/* Diagnostic Overview Banner */}
+              <div className="bg-gradient-to-r from-amber-500/10 via-pink-500/10 to-purple-500/10 border border-amber-500/20 rounded-2xl p-5">
+                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="p-2.5 bg-amber-500/20 border border-amber-500/30 rounded-xl text-amber-400 shrink-0 mt-0.5">
+                      <AlertTriangle className="w-6 h-6" />
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="font-bold text-sm text-white flex items-center gap-2">
+                        Ad Mediation Failure Diagnostics & Troubleshooting
+                        <span className="text-[10px] font-mono px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded-full border border-amber-500/30">
+                          Live Telemetry
+                        </span>
+                      </h3>
+                      <p className="text-xs text-white/70 max-w-3xl leading-relaxed">
+                        Tracking real-time ad load and show failures across Google AdMob and Meta Audience Network bidding.
+                        When ads do not show, Google Error Code 3 (<strong className="text-amber-300 font-semibold">NO_FILL</strong>) indicates no inventory was returned by ad networks for this auction. If users watch ads before pre-fetching completes, a <strong className="text-pink-300 font-semibold">not_ready_fallback</strong> credit is granted gracefully.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => {
+                        fetchAdLogs();
+                        fetchAdDiagnostics();
+                      }}
+                      disabled={isAdLogsLoading}
+                      className="px-4 py-2 bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl text-xs font-semibold flex items-center gap-2 transition"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isAdLogsLoading ? "animate-spin" : ""}`} /> Refresh Telemetry
+                    </button>
+                  </div>
+                </div>
+
+                {/* Error Code Reference Strip */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mt-4 pt-4 border-t border-white/10 text-[11px]">
+                  <div className="bg-[#120F24]/80 p-2.5 rounded-xl border border-white/5">
+                    <span className="font-bold text-amber-400 block mb-0.5">Code 3: NO_FILL</span>
+                    <span className="text-white/50 text-[10px]">No ad inventory available from Google or Meta.</span>
+                  </div>
+                  <div className="bg-[#120F24]/80 p-2.5 rounded-xl border border-white/5">
+                    <span className="font-bold text-red-400 block mb-0.5">Code 1: INVALID_REQUEST</span>
+                    <span className="text-white/50 text-[10px]">Malformed unit ID, missing bundle ID or placement mismatch.</span>
+                  </div>
+                  <div className="bg-[#120F24]/80 p-2.5 rounded-xl border border-white/5">
+                    <span className="font-bold text-sky-400 block mb-0.5">Code 2: NETWORK_ERROR</span>
+                    <span className="text-white/50 text-[10px]">Device offline or firewall blocked ad server connection.</span>
+                  </div>
+                  <div className="bg-[#120F24]/80 p-2.5 rounded-xl border border-white/5">
+                    <span className="font-bold text-purple-400 block mb-0.5">Code 0: INTERNAL_ERROR</span>
+                    <span className="text-white/50 text-[10px]">Unexpected SDK or adapter failure during auction.</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* KPI Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+                <div className="bg-[#161329] border border-white/5 rounded-2xl p-4">
+                  <div className="flex items-center justify-between text-white/40 mb-2">
+                    <span className="text-xs font-medium">Total Events</span>
+                    <Activity className="w-4 h-4 text-purple-400" />
+                  </div>
+                  <div className="text-2xl font-bold text-white">
+                    {adDiagnostics?.totalLogs ?? adLogsTotal}
+                  </div>
+                  <div className="text-[11px] text-white/40 mt-1">Logged requests & shows</div>
+                </div>
+
+                <div className="bg-[#161329] border border-rose-500/20 rounded-2xl p-4 bg-gradient-to-b from-rose-500/5 to-transparent">
+                  <div className="flex items-center justify-between text-white/40 mb-2">
+                    <span className="text-xs font-medium text-rose-300">Failed Loads</span>
+                    <AlertTriangle className="w-4 h-4 text-rose-400" />
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-bold text-rose-400">
+                      {adDiagnostics?.failedLoads ?? 0}
+                    </span>
+                    <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                      {adDiagnostics?.failureRate ?? "0%"}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-rose-300/60 mt-1">Auction failed to fill</div>
+                </div>
+
+                <div className="bg-[#161329] border border-emerald-500/20 rounded-2xl p-4 bg-gradient-to-b from-emerald-500/5 to-transparent">
+                  <div className="flex items-center justify-between text-white/40 mb-2">
+                    <span className="text-xs font-medium text-emerald-300">Successful Loads</span>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div className="text-2xl font-bold text-emerald-400">
+                    {Math.max(0, (adDiagnostics?.totalLoads ?? 0) - (adDiagnostics?.failedLoads ?? 0))}
+                  </div>
+                  <div className="text-[11px] text-emerald-300/60 mt-1">Ready for impression</div>
+                </div>
+
+                <div className="bg-[#161329] border border-amber-500/20 rounded-2xl p-4 bg-gradient-to-b from-amber-500/5 to-transparent">
+                  <div className="flex items-center justify-between text-white/40 mb-2">
+                    <span className="text-xs font-medium text-amber-300">Show Failures</span>
+                    <XCircle className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div className="text-2xl font-bold text-amber-400">
+                    {adDiagnostics?.showFailures ?? 0}
+                  </div>
+                  <div className="text-[11px] text-amber-300/60 mt-1">Render failed at show time</div>
+                </div>
+
+                <div className="bg-[#161329] border border-pink-500/20 rounded-2xl p-4 bg-gradient-to-b from-pink-500/5 to-transparent col-span-2 sm:col-span-1">
+                  <div className="flex items-center justify-between text-white/40 mb-2">
+                    <span className="text-xs font-medium text-pink-300">Not Ready Fallbacks</span>
+                    <Clock className="w-4 h-4 text-pink-400" />
+                  </div>
+                  <div className="text-2xl font-bold text-pink-400">
+                    {adDiagnostics?.fallbackCount ?? 0}
+                  </div>
+                  <div className="text-[11px] text-pink-300/60 mt-1">Free credit granted w/o ad</div>
+                </div>
+              </div>
+
+              {/* Providers & Error Distribution Breakdown */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-[#161329] border border-white/5 rounded-2xl p-4">
+                  <h4 className="text-xs font-semibold text-white/80 mb-3 flex items-center justify-between">
+                    <span>Ad Provider Telemetry Share</span>
+                    <Smartphone className="w-3.5 h-3.5 text-white/40" />
+                  </h4>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-white/70 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Google AdMob
+                        </span>
+                        <span className="font-mono text-white/90">
+                          {adDiagnostics?.providerCounts?.["Google AdMob"] ?? 0} events
+                        </span>
+                      </div>
+                      <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-blue-500 h-full rounded-full transition-all"
+                          style={{
+                            width: `${
+                              ((adDiagnostics?.providerCounts?.["Google AdMob"] ?? 0) /
+                                Math.max(1, (adDiagnostics?.totalLogs ?? 1))) *
+                              100
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="text-white/70 flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" /> Meta Audience Network (Bidding)
+                        </span>
+                        <span className="font-mono text-white/90">
+                          {adDiagnostics?.providerCounts?.["Meta Audience Network"] ?? 0} events
+                        </span>
+                      </div>
+                      <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-purple-500 h-full rounded-full transition-all"
+                          style={{
+                            width: `${
+                              ((adDiagnostics?.providerCounts?.["Meta Audience Network"] ?? 0) /
+                                Math.max(1, (adDiagnostics?.totalLogs ?? 1))) *
+                              100
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-[#161329] border border-white/5 rounded-2xl p-4">
+                  <h4 className="text-xs font-semibold text-white/80 mb-3 flex items-center justify-between">
+                    <span>Error Code Occurrence Breakdown</span>
+                    <Sliders className="w-3.5 h-3.5 text-white/40" />
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-[#100D1F] p-2.5 rounded-xl border border-white/5 flex items-center justify-between">
+                      <span className="text-amber-400 font-medium">Code 3 (NO_FILL)</span>
+                      <span className="font-mono font-bold text-white px-2 py-0.5 bg-amber-500/20 rounded">
+                        {adDiagnostics?.errorCodeCounts?.["3"] ?? 0}
+                      </span>
+                    </div>
+                    <div className="bg-[#100D1F] p-2.5 rounded-xl border border-white/5 flex items-center justify-between">
+                      <span className="text-red-400 font-medium">Code 1 (INVALID_REQ)</span>
+                      <span className="font-mono font-bold text-white px-2 py-0.5 bg-red-500/20 rounded">
+                        {adDiagnostics?.errorCodeCounts?.["1"] ?? 0}
+                      </span>
+                    </div>
+                    <div className="bg-[#100D1F] p-2.5 rounded-xl border border-white/5 flex items-center justify-between">
+                      <span className="text-purple-400 font-medium">Code 0 (INTERNAL)</span>
+                      <span className="font-mono font-bold text-white px-2 py-0.5 bg-purple-500/20 rounded">
+                        {adDiagnostics?.errorCodeCounts?.["0"] ?? 0}
+                      </span>
+                    </div>
+                    <div className="bg-[#100D1F] p-2.5 rounded-xl border border-white/5 flex items-center justify-between">
+                      <span className="text-sky-400 font-medium">Code 2 (NETWORK)</span>
+                      <span className="font-mono font-bold text-white px-2 py-0.5 bg-sky-500/20 rounded">
+                        {adDiagnostics?.errorCodeCounts?.["2"] ?? 0}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filters Bar */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-4 space-y-3">
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <Search className="w-4 h-4 text-white/40 absolute left-3.5 top-3" />
+                    <input
+                      type="text"
+                      value={adLogsSearch}
+                      onChange={(e) => setAdLogsSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          setAdLogsPage(1);
+                          fetchAdLogs();
+                        }
+                      }}
+                      placeholder="Search by user email, user name, error message, adapter..."
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:border-pink-500 text-white placeholder-white/30"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Event Type Filter */}
+                    <select
+                      value={adLogsEventFilter}
+                      onChange={(e) => {
+                        setAdLogsEventFilter(e.target.value);
+                        setAdLogsPage(1);
+                      }}
+                      className="bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white/80 focus:outline-none focus:border-pink-500"
+                    >
+                      <option value="all">All Events</option>
+                      <option value="load_failed">Load Failed (NO_FILL / Errors)</option>
+                      <option value="not_ready_fallback">Not Ready Fallback</option>
+                      <option value="loaded">Loaded</option>
+                      <option value="show_failed">Show Failed</option>
+                      <option value="show_success">Show Success</option>
+                      <option value="show_attempt">Show Attempt</option>
+                      <option value="load_request">Load Request</option>
+                    </select>
+
+                    {/* Provider Filter */}
+                    <select
+                      value={adLogsProviderFilter}
+                      onChange={(e) => {
+                        setAdLogsProviderFilter(e.target.value);
+                        setAdLogsPage(1);
+                      }}
+                      className="bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white/80 focus:outline-none focus:border-pink-500"
+                    >
+                      <option value="all">All Providers</option>
+                      <option value="Google AdMob">Google AdMob</option>
+                      <option value="Meta Audience Network">Meta Audience Network</option>
+                    </select>
+
+                    {/* Ad Format Filter */}
+                    <select
+                      value={adLogsTypeFilter}
+                      onChange={(e) => {
+                        setAdLogsTypeFilter(e.target.value);
+                        setAdLogsPage(1);
+                      }}
+                      className="bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white/80 focus:outline-none focus:border-pink-500"
+                    >
+                      <option value="all">All Formats</option>
+                      <option value="rewarded">Rewarded Video</option>
+                      <option value="rewarded_interstitial">Rewarded Interstitial</option>
+                      <option value="interstitial">Interstitial</option>
+                    </select>
+
+                    {/* Error Code Filter */}
+                    <select
+                      value={adLogsErrorCodeFilter}
+                      onChange={(e) => {
+                        setAdLogsErrorCodeFilter(e.target.value);
+                        setAdLogsPage(1);
+                      }}
+                      className="bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white/80 focus:outline-none focus:border-pink-500"
+                    >
+                      <option value="all">All Error Codes</option>
+                      <option value="3">Code 3: NO_FILL</option>
+                      <option value="1">Code 1: INVALID_REQUEST</option>
+                      <option value="0">Code 0: INTERNAL_ERROR</option>
+                      <option value="2">Code 2: NETWORK_ERROR</option>
+                    </select>
+
+                    <button
+                      onClick={() => {
+                        setAdLogsPage(1);
+                        fetchAdLogs();
+                      }}
+                      className="px-4 py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl text-xs font-semibold hover:opacity-90 transition shrink-0"
+                    >
+                      Apply
+                    </button>
+
+                    {(adLogsSearch || adLogsEventFilter !== "all" || adLogsProviderFilter !== "all" || adLogsTypeFilter !== "all" || adLogsErrorCodeFilter !== "all") && (
+                      <button
+                        onClick={() => {
+                          setAdLogsSearch("");
+                          setAdLogsEventFilter("all");
+                          setAdLogsProviderFilter("all");
+                          setAdLogsTypeFilter("all");
+                          setAdLogsErrorCodeFilter("all");
+                          setAdLogsPage(1);
+                        }}
+                        className="px-3 py-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-xs text-white/60 hover:text-white transition"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Logs Table */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl overflow-hidden shadow-xl">
+                <div className="p-4 border-b border-white/5 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-sm text-white">Ad Event & Error Telemetry Logs</h3>
+                    <p className="text-xs text-white/40">Showing real-time records from mobile devices</p>
+                  </div>
+                  <span className="text-xs font-mono text-white/40">
+                    Total: <strong className="text-white">{adLogsTotal}</strong> records
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-white/5 bg-white/[0.02] text-white/40 uppercase tracking-wider text-[10px]">
+                        <th className="py-3 px-4">Time</th>
+                        <th className="py-3 px-4">User</th>
+                        <th className="py-3 px-4">Format & Placement</th>
+                        <th className="py-3 px-4">Event Status</th>
+                        <th className="py-3 px-4">Provider</th>
+                        <th className="py-3 px-4">Error Diagnostics</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {isAdLogsLoading ? (
+                        <tr>
+                          <td colSpan={7} className="text-center py-12 text-white/40">
+                            <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-pink-500" />
+                            Loading telemetry logs...
+                          </td>
+                        </tr>
+                      ) : adLogsList.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="text-center py-12 text-white/40">
+                            No ad telemetry logs match the current filters.
+                          </td>
+                        </tr>
+                      ) : (
+                        adLogsList.map((log) => {
+                          const isFailed = log.eventType === "load_failed" || log.eventType === "show_failed";
+                          const isFallback = log.eventType === "not_ready_fallback";
+                          const isSuccess = log.eventType === "loaded" || log.eventType === "show_success";
+
+                          return (
+                            <tr key={log._id} className="hover:bg-white/[0.02] transition">
+                              {/* Time */}
+                              <td className="py-3 px-4 whitespace-nowrap text-white/60 text-[11px] font-mono">
+                                {new Date(log.createdAt).toLocaleString(undefined, {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  second: "2-digit",
+                                })}
+                              </td>
+
+                              {/* User */}
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center font-bold text-[10px] text-white">
+                                    {(log.userName || log.userEmail || "U")[0]?.toUpperCase()}
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-white/90 font-medium text-xs max-w-[130px] truncate">
+                                      {log.userName || "Guest / App User"}
+                                    </span>
+                                    <span className="text-white/40 text-[10px] max-w-[130px] truncate">
+                                      {log.userEmail || log.userId || "anonymous"}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Format & Placement */}
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="inline-block px-2 py-0.5 rounded text-[10px] font-semibold bg-white/10 text-white/90 w-fit">
+                                    {log.adType}
+                                  </span>
+                                  <span className="text-[10px] text-white/40 font-mono truncate max-w-[120px]">
+                                    {log.placement || "default"}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Event Status */}
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                {isFailed ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                                    <XCircle className="w-3 h-3" /> {log.eventType}
+                                  </span>
+                                ) : isFallback ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                    <Clock className="w-3 h-3" /> not_ready_fallback
+                                  </span>
+                                ) : isSuccess ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                                    <CheckCircle2 className="w-3 h-3" /> {log.eventType}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">
+                                    <Activity className="w-3 h-3" /> {log.eventType}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Provider */}
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                <span
+                                  className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                    log.provider?.includes("Meta")
+                                      ? "bg-purple-500/20 text-purple-300 border border-purple-500/30"
+                                      : "bg-blue-500/20 text-blue-300 border border-blue-500/30"
+                                  }`}
+                                >
+                                  {log.provider || "Google AdMob"}
+                                </span>
+                              </td>
+
+                              {/* Error Diagnostics */}
+                              <td className="py-3 px-4 max-w-xs">
+                                {log.errorCode !== undefined && log.errorCode !== null ? (
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                        Code {log.errorCode}
+                                      </span>
+                                      <span className="text-white/40 text-[10px] font-mono truncate">
+                                        {log.errorDomain || "admob"}
+                                      </span>
+                                    </div>
+                                    <p className="text-white/80 text-[11px] truncate" title={log.errorMessage}>
+                                      {log.errorMessage || "No description provided"}
+                                    </p>
+                                  </div>
+                                ) : isFallback ? (
+                                  <span className="text-amber-300/80 text-[11px]">
+                                    User requested reward before ad finished caching.
+                                  </span>
+                                ) : (
+                                  <span className="text-emerald-400/80 text-[11px] flex items-center gap-1">
+                                    <Check className="w-3 h-3" /> OK / Cached
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Actions */}
+                              <td className="py-3 px-4 text-right whitespace-nowrap">
+                                <button
+                                  onClick={() => {
+                                    setSelectedAdLog(log);
+                                    setIsAdLogModalOpen(true);
+                                  }}
+                                  className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[11px] text-white/80 hover:text-white flex items-center gap-1.5 ml-auto transition"
+                                >
+                                  <Eye className="w-3 h-3" /> Inspect
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                {adLogsTotalPages > 1 && (
+                  <div className="p-4 border-t border-white/5 flex items-center justify-between text-xs text-white/60">
+                    <div>
+                      Page <strong className="text-white">{adLogsPage}</strong> of{" "}
+                      <strong className="text-white">{adLogsTotalPages}</strong>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setAdLogsPage((p) => Math.max(1, p - 1))}
+                        disabled={adLogsPage <= 1}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                      </button>
+                      <button
+                        onClick={() => setAdLogsPage((p) => Math.min(adLogsTotalPages, p + 1))}
+                        disabled={adLogsPage >= adLogsTotalPages}
+                        className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1"
+                      >
+                        Next <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* TAB: SETTINGS & LLM APIS */}
           {activeTab === "settings" && (
             <div className="bg-[#161329] border border-white/5 rounded-2xl p-6 max-w-2xl space-y-6">
@@ -3827,6 +4411,203 @@ export default function App() {
                   );
                 })()
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AD LOG MEDIATION INSPECTOR MODAL */}
+      {isAdLogModalOpen && selectedAdLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#161329] border border-white/10 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-gradient-to-tr from-pink-500 to-purple-600 rounded-xl">
+                  <AlertTriangle className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white flex items-center gap-2">
+                    Ad Mediation Telemetry Inspector
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                        selectedAdLog.eventType?.includes("failed")
+                          ? "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                          : selectedAdLog.eventType === "not_ready_fallback"
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                          : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      }`}
+                    >
+                      {selectedAdLog.eventType}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-white/40">
+                    Logged at {new Date(selectedAdLog.createdAt).toLocaleString()} • ID: {selectedAdLog._id}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAdLogModalOpen(false);
+                  setSelectedAdLog(null);
+                }}
+                className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1 text-xs">
+              {/* Top Overview Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-[#0E0C1C] p-3 rounded-xl border border-white/5">
+                  <span className="text-[10px] text-white/40 block mb-1">Provider</span>
+                  <span className="font-semibold text-white">
+                    {selectedAdLog.provider || "Google AdMob"}
+                  </span>
+                </div>
+                <div className="bg-[#0E0C1C] p-3 rounded-xl border border-white/5">
+                  <span className="text-[10px] text-white/40 block mb-1">Ad Format</span>
+                  <span className="font-semibold text-white">{selectedAdLog.adType}</span>
+                </div>
+                <div className="bg-[#0E0C1C] p-3 rounded-xl border border-white/5">
+                  <span className="text-[10px] text-white/40 block mb-1">Placement</span>
+                  <span className="font-semibold text-white font-mono">
+                    {selectedAdLog.placement || "default"}
+                  </span>
+                </div>
+                <div className="bg-[#0E0C1C] p-3 rounded-xl border border-white/5">
+                  <span className="text-[10px] text-white/40 block mb-1">Device / OS</span>
+                  <span className="font-semibold text-white">
+                    {selectedAdLog.platform || "android"} {selectedAdLog.deviceModel ? `(${selectedAdLog.deviceModel})` : ""}
+                  </span>
+                </div>
+              </div>
+
+              {/* User Context */}
+              <div className="bg-[#0E0C1C] p-3.5 rounded-xl border border-white/5 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-white/40 block">User Context</span>
+                  <span className="font-medium text-white/90">
+                    {selectedAdLog.userName || "Guest"} ({selectedAdLog.userEmail || "No Email"})
+                  </span>
+                </div>
+                <span className="font-mono text-[10px] text-white/40">
+                  User ID: {selectedAdLog.userId || "anonymous"}
+                </span>
+              </div>
+
+              {/* Error Diagnostics Banner (if failed) */}
+              {(selectedAdLog.errorCode !== undefined && selectedAdLog.errorCode !== null) && (
+                <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-rose-500 text-white font-bold font-mono text-[11px]">
+                      Error Code {selectedAdLog.errorCode}
+                    </span>
+                    <span className="text-rose-300 font-semibold text-xs">
+                      {selectedAdLog.errorCode === 3
+                        ? "ERROR_CODE_NO_FILL (No ad inventory returned by Google/Meta bidding)"
+                        : selectedAdLog.errorCode === 1
+                        ? "ERROR_CODE_INVALID_REQUEST (Invalid ad unit ID or placement configuration)"
+                        : selectedAdLog.errorCode === 2
+                        ? "ERROR_CODE_NETWORK_ERROR (Network connection failed)"
+                        : selectedAdLog.errorCode === 0
+                        ? "ERROR_CODE_INTERNAL_ERROR (Internal SDK error)"
+                        : "Ad Mediation Failure"}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-white/80 space-y-1">
+                    <div>
+                      <strong className="text-white/50 font-normal">Domain: </strong>
+                      <span className="font-mono">{selectedAdLog.errorDomain || "com.google.android.gms.ads"}</span>
+                    </div>
+                    <div>
+                      <strong className="text-white/50 font-normal">Message: </strong>
+                      <span>{selectedAdLog.errorMessage || "No description"}</span>
+                    </div>
+                    <div>
+                      <strong className="text-white/50 font-normal">Unit ID: </strong>
+                      <span className="font-mono text-[10px]">{selectedAdLog.adUnitId || "None"}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Mediation Adapter Responses (Meta Audience Network vs Google AdMob waterfall) */}
+              <div className="space-y-2">
+                <h4 className="font-bold text-xs text-white/80 flex items-center justify-between">
+                  <span>Mediation Adapter Waterfall Responses</span>
+                  <span className="text-[10px] text-white/40">
+                    {selectedAdLog.mediationResponses?.length || 0} adapter(s) evaluated
+                  </span>
+                </h4>
+
+                {selectedAdLog.mediationResponses && selectedAdLog.mediationResponses.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedAdLog.mediationResponses.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="bg-[#0E0C1C] border border-white/5 rounded-xl p-3 space-y-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono font-semibold text-white/90 text-[11px]">
+                            {item.adapterClassName || "Unknown Adapter"}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-white/5 text-white/60 font-mono">
+                            {item.latencyMillis ? `${item.latencyMillis} ms` : "N/A"}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-[10px] text-white/50">
+                          <span>Ad Source: <strong className="text-white/70">{item.adSourceName || "None"}</strong></span>
+                          {item.adSourceId && <span>ID: <strong className="text-white/70">{item.adSourceId}</strong></span>}
+                        </div>
+                        {item.adError && (
+                          <div className="mt-2 p-2 rounded bg-rose-500/10 border border-rose-500/20 text-[10px] text-rose-300 font-mono">
+                            Error {item.adError.code} ({item.adError.domain}): {item.adError.message}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-[#0E0C1C] border border-white/5 rounded-xl p-4 text-center text-white/40 text-[11px]">
+                    No mediation adapter breakdown attached. (Pre-flight request or direct SDK event)
+                  </div>
+                )}
+              </div>
+
+              {/* Raw JSON Debug Viewer */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-white/70 text-[11px]">Raw Telemetry JSON</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(JSON.stringify(selectedAdLog, null, 2));
+                      showToast("Telemetry JSON copied to clipboard");
+                    }}
+                    className="px-2 py-1 bg-white/5 hover:bg-white/10 rounded text-[10px] text-white/60 hover:text-white transition"
+                  >
+                    Copy JSON
+                  </button>
+                </div>
+                <pre className="p-3 bg-[#080611] border border-white/5 rounded-xl font-mono text-[10px] text-white/60 max-h-48 overflow-y-auto">
+                  {JSON.stringify(selectedAdLog, null, 2)}
+                </pre>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-white/5 flex justify-end">
+              <button
+                onClick={() => {
+                  setIsAdLogModalOpen(false);
+                  setSelectedAdLog(null);
+                }}
+                className="px-5 py-2 bg-white/10 hover:bg-white/15 rounded-xl text-xs font-semibold text-white transition"
+              >
+                Close Inspector
+              </button>
             </div>
           </div>
         </div>
