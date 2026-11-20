@@ -3071,6 +3071,27 @@ export default function App() {
                       />
                     </div>
                   </div>
+
+                  <div className="bg-[#100D1F] p-4 rounded-xl border border-white/5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-white">Daily Ad Fallback Safety Cap</span>
+                      <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-bold">Revenue Protection</span>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-white/60 mb-1">Max Daily Fallbacks (When Ads Fail / Empty)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={sysConfig.maxDailyAdFallbacks ?? 3}
+                        onChange={(e) => setSysConfig({ ...sysConfig, maxDailyAdFallbacks: Number(e.target.value) })}
+                        className="w-full bg-[#161329] border border-white/10 rounded-lg px-3 py-2 text-xs font-bold text-amber-400 focus:outline-none"
+                      />
+                      <p className="text-[10px] text-white/40 mt-1">
+                        When ads fail to load, users receive at most {sysConfig.maxDailyAdFallbacks ?? 3} free credits ({(sysConfig.maxDailyAdFallbacks ?? 3) * (sysConfig.rewardedChatCredits ?? 5)} chat messages). After this, they are asked to try again once an ad is ready.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -3078,7 +3099,7 @@ export default function App() {
               <div className="bg-[#161329] border border-white/5 rounded-2xl p-6 space-y-4">
                 <div>
                   <h4 className="font-bold text-sm text-pink-400">🆔 AdMob App & Unit IDs</h4>
-                  <p className="text-xs text-white/50">Overrides default test IDs with your production Google AdMob IDs dynamically</p>
+                  <p className="text-xs text-white/50">Overrides default test IDs with your production Google AdMob IDs dynamically. Each format must have a distinct unit ID in AdMob.</p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -3113,6 +3134,7 @@ export default function App() {
                       placeholder="ca-app-pub-xxxxxxxx/yyyyyyyy"
                       className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
                     />
+                    <span className="text-[10px] text-white/40 block mt-0.5">Must be created as 'Rewarded' in AdMob</span>
                   </div>
 
                   <div>
@@ -3124,6 +3146,7 @@ export default function App() {
                       placeholder="ca-app-pub-xxxxxxxx/yyyyyyyy"
                       className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
                     />
+                    <span className="text-[10px] text-white/40 block mt-0.5">Must be created as 'Rewarded Interstitial' in AdMob</span>
                   </div>
 
                   <div>
@@ -3135,6 +3158,7 @@ export default function App() {
                       placeholder="ca-app-pub-xxxxxxxx/yyyyyyyy"
                       className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
                     />
+                    <span className="text-[10px] text-white/40 block mt-0.5">Must be created as 'Banner' in AdMob</span>
                   </div>
 
                   <div>
@@ -3146,6 +3170,7 @@ export default function App() {
                       placeholder="ca-app-pub-xxxxxxxx/yyyyyyyy"
                       className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
                     />
+                    <span className="text-[10px] text-amber-400/70 block mt-0.5">Do not reuse Rewarded Interstitial ID (causes Format Mismatch error)</span>
                   </div>
                 </div>
 
@@ -3239,10 +3264,10 @@ export default function App() {
                   </div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-2xl font-bold text-rose-400">
-                      {adDiagnostics?.failedLoads ?? 0}
+                      {adDiagnostics?.failedLoads ?? adDiagnostics?.totalLoadFailed ?? 0}
                     </span>
                     <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                      {adDiagnostics?.failureRate ?? "0%"}
+                      {typeof adDiagnostics?.failureRate === "number" ? `${adDiagnostics.failureRate}%` : (adDiagnostics?.failureRate ?? "0%")}
                     </span>
                   </div>
                   <div className="text-[11px] text-rose-300/60 mt-1">Auction failed to fill</div>
@@ -3254,7 +3279,7 @@ export default function App() {
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                   </div>
                   <div className="text-2xl font-bold text-emerald-400">
-                    {Math.max(0, (adDiagnostics?.totalLoads ?? 0) - (adDiagnostics?.failedLoads ?? 0))}
+                    {adDiagnostics?.successfulLoads ?? adDiagnostics?.totalLoaded ?? Math.max(0, (adDiagnostics?.totalLoads ?? 0) - (adDiagnostics?.failedLoads ?? adDiagnostics?.totalLoadFailed ?? 0))}
                   </div>
                   <div className="text-[11px] text-emerald-300/60 mt-1">Ready for impression</div>
                 </div>
@@ -3265,7 +3290,7 @@ export default function App() {
                     <XCircle className="w-4 h-4 text-amber-400" />
                   </div>
                   <div className="text-2xl font-bold text-amber-400">
-                    {adDiagnostics?.showFailures ?? 0}
+                    {adDiagnostics?.showFailures ?? adDiagnostics?.totalShowFailed ?? 0}
                   </div>
                   <div className="text-[11px] text-amber-300/60 mt-1">Render failed at show time</div>
                 </div>
@@ -3276,7 +3301,7 @@ export default function App() {
                     <Clock className="w-4 h-4 text-pink-400" />
                   </div>
                   <div className="text-2xl font-bold text-pink-400">
-                    {adDiagnostics?.fallbackCount ?? 0}
+                    {adDiagnostics?.fallbackCount ?? adDiagnostics?.notReadyFallbacks ?? 0}
                   </div>
                   <div className="text-[11px] text-pink-300/60 mt-1">Free credit granted w/o ad</div>
                 </div>
@@ -3296,7 +3321,7 @@ export default function App() {
                           <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" /> Google AdMob
                         </span>
                         <span className="font-mono text-white/90">
-                          {adDiagnostics?.providerCounts?.["Google AdMob"] ?? 0} events
+                          {adDiagnostics?.providerCounts?.["Google AdMob"] ?? adDiagnostics?.providerBreakdown?.find(p => p._id?.includes('Google') || p._id?.includes('AdMob'))?.count ?? 0} events
                         </span>
                       </div>
                       <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
@@ -3304,7 +3329,7 @@ export default function App() {
                           className="bg-blue-500 h-full rounded-full transition-all"
                           style={{
                             width: `${
-                              ((adDiagnostics?.providerCounts?.["Google AdMob"] ?? 0) /
+                              ((adDiagnostics?.providerCounts?.["Google AdMob"] ?? adDiagnostics?.providerBreakdown?.find(p => p._id?.includes('Google') || p._id?.includes('AdMob'))?.count ?? 0) /
                                 Math.max(1, (adDiagnostics?.totalLogs ?? 1))) *
                               100
                             }%`,
@@ -3319,7 +3344,7 @@ export default function App() {
                           <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" /> Meta Audience Network (Bidding)
                         </span>
                         <span className="font-mono text-white/90">
-                          {adDiagnostics?.providerCounts?.["Meta Audience Network"] ?? 0} events
+                          {adDiagnostics?.providerCounts?.["Meta Audience Network"] ?? adDiagnostics?.providerBreakdown?.find(p => p._id?.includes('Meta') || p._id?.includes('Facebook'))?.count ?? 0} events
                         </span>
                       </div>
                       <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
@@ -3327,7 +3352,7 @@ export default function App() {
                           className="bg-purple-500 h-full rounded-full transition-all"
                           style={{
                             width: `${
-                              ((adDiagnostics?.providerCounts?.["Meta Audience Network"] ?? 0) /
+                              ((adDiagnostics?.providerCounts?.["Meta Audience Network"] ?? adDiagnostics?.providerBreakdown?.find(p => p._id?.includes('Meta') || p._id?.includes('Facebook'))?.count ?? 0) /
                                 Math.max(1, (adDiagnostics?.totalLogs ?? 1))) *
                               100
                             }%`,
@@ -3347,25 +3372,25 @@ export default function App() {
                     <div className="bg-[#100D1F] p-2.5 rounded-xl border border-white/5 flex items-center justify-between">
                       <span className="text-amber-400 font-medium">Code 3 (NO_FILL)</span>
                       <span className="font-mono font-bold text-white px-2 py-0.5 bg-amber-500/20 rounded">
-                        {adDiagnostics?.errorCodeCounts?.["3"] ?? 0}
+                        {adDiagnostics?.errorCodeCounts?.["3"] ?? adDiagnostics?.errorCodesBreakdown?.filter(e => String(e._id?.code) === '3')?.reduce((acc, curr) => acc + curr.count, 0) ?? 0}
                       </span>
                     </div>
                     <div className="bg-[#100D1F] p-2.5 rounded-xl border border-white/5 flex items-center justify-between">
                       <span className="text-red-400 font-medium">Code 1 (INVALID_REQ)</span>
                       <span className="font-mono font-bold text-white px-2 py-0.5 bg-red-500/20 rounded">
-                        {adDiagnostics?.errorCodeCounts?.["1"] ?? 0}
+                        {adDiagnostics?.errorCodeCounts?.["1"] ?? adDiagnostics?.errorCodesBreakdown?.filter(e => String(e._id?.code) === '1')?.reduce((acc, curr) => acc + curr.count, 0) ?? 0}
                       </span>
                     </div>
                     <div className="bg-[#100D1F] p-2.5 rounded-xl border border-white/5 flex items-center justify-between">
                       <span className="text-purple-400 font-medium">Code 0 (INTERNAL)</span>
                       <span className="font-mono font-bold text-white px-2 py-0.5 bg-purple-500/20 rounded">
-                        {adDiagnostics?.errorCodeCounts?.["0"] ?? 0}
+                        {adDiagnostics?.errorCodeCounts?.["0"] ?? adDiagnostics?.errorCodesBreakdown?.filter(e => String(e._id?.code) === '0')?.reduce((acc, curr) => acc + curr.count, 0) ?? 0}
                       </span>
                     </div>
                     <div className="bg-[#100D1F] p-2.5 rounded-xl border border-white/5 flex items-center justify-between">
                       <span className="text-sky-400 font-medium">Code 2 (NETWORK)</span>
                       <span className="font-mono font-bold text-white px-2 py-0.5 bg-sky-500/20 rounded">
-                        {adDiagnostics?.errorCodeCounts?.["2"] ?? 0}
+                        {adDiagnostics?.errorCodeCounts?.["2"] ?? adDiagnostics?.errorCodesBreakdown?.filter(e => String(e._id?.code) === '2')?.reduce((acc, curr) => acc + curr.count, 0) ?? 0}
                       </span>
                     </div>
                   </div>
