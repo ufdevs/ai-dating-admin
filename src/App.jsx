@@ -427,7 +427,7 @@ export default function App() {
         }
       } else if (activeTab === "admob") {
         const adRes = await api.get("/admin/ads/analytics").catch(() => null);
-        if (adRes?.data?.success) setAdAnalytics(adRes.data.data);
+        if (adRes?.data?.data || adRes?.data?.success) setAdAnalytics(adRes.data.data || adRes.data);
       } else if (activeTab === "adlogs") {
         fetchAdLogs();
         fetchAdDiagnostics();
@@ -782,8 +782,9 @@ export default function App() {
   const fetchAdDiagnostics = async () => {
     try {
       const res = await api.get("/admin/ads/diagnostics");
-      if (res.data?.success) {
-        setAdDiagnostics(res.data.data);
+      const diagData = res.data?.data || (res.data && !res.data.logs ? res.data : null);
+      if (diagData) {
+        setAdDiagnostics(diagData);
       }
     } catch (err) {
       console.warn("Failed fetching ad diagnostics:", err.message);
