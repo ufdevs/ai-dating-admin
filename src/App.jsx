@@ -38,6 +38,7 @@ import {
   CheckCircle2,
   XCircle,
   Image as ImageIcon,
+  MousePointerClick,
 } from "lucide-react";
 import {
   AreaChart,
@@ -158,8 +159,6 @@ export default function App() {
     admobEnabled: true,
     admobAppIdAndroid: "ca-app-pub-3940256099942544~3347511713",
     admobAppIdIos: "ca-app-pub-3940256099942544~1458002511",
-    admobBannerAdUnitId: "ca-app-pub-3940256099942544/6300978111",
-    admobInterstitialAdUnitId: "ca-app-pub-3940256099942544/1033173712",
     admobRewardedAdUnitId: "ca-app-pub-3940256099942544/5224354917",
     admobRewardedInterstitialAdUnitId: "ca-app-pub-3940256099942544/5354046379",
     rewardedChatCredits: 5,
@@ -2589,6 +2588,9 @@ export default function App() {
                                   <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold">
                                     ✓ {sent} Delivered
                                   </span>
+                                  <span className="px-2 py-0.5 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/20 text-[11px] font-bold">
+                                    👆 {log.stats?.clicked || 0} Clicked {sent > 0 ? `(${Math.round(((log.stats?.clicked || 0) / sent) * 100)}% CTR)` : ""}
+                                  </span>
                                   {failed > 0 && (
                                     <span className="px-2 py-0.5 rounded-md bg-red-500/10 text-red-400 border border-red-500/20 text-[11px] font-bold">
                                       ✕ {failed} Failed
@@ -3126,7 +3128,7 @@ export default function App() {
                   </div>
 
                   <div>
-                    <label className="block text-xs text-white/70 mb-1">Rewarded Video Ad Unit ID</label>
+                    <label className="block text-xs text-white/70 mb-1">Rewarded Video Ad Unit ID (Opt-in Credits / Consent)</label>
                     <input
                       type="text"
                       value={sysConfig.admobRewardedAdUnitId || ""}
@@ -3134,11 +3136,11 @@ export default function App() {
                       placeholder="ca-app-pub-xxxxxxxx/yyyyyyyy"
                       className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
                     />
-                    <span className="text-[10px] text-white/40 block mt-0.5">Must be created as 'Rewarded' in AdMob</span>
+                    <span className="text-[10px] text-amber-400/80 block mt-0.5">AdMob Policy: Shown only with explicit user consent for free credit refills</span>
                   </div>
 
                   <div>
-                    <label className="block text-xs text-white/70 mb-1">Rewarded Interstitial Ad Unit ID</label>
+                    <label className="block text-xs text-white/70 mb-1">Rewarded Interstitial Ad Unit ID (3 Swipes / Transitions)</label>
                     <input
                       type="text"
                       value={sysConfig.admobRewardedInterstitialAdUnitId || ""}
@@ -3146,31 +3148,7 @@ export default function App() {
                       placeholder="ca-app-pub-xxxxxxxx/yyyyyyyy"
                       className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
                     />
-                    <span className="text-[10px] text-white/40 block mt-0.5">Must be created as 'Rewarded Interstitial' in AdMob</span>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs text-white/70 mb-1">Banner Ad Unit ID (Optional)</label>
-                    <input
-                      type="text"
-                      value={sysConfig.admobBannerAdUnitId || ""}
-                      onChange={(e) => setSysConfig({ ...sysConfig, admobBannerAdUnitId: e.target.value })}
-                      placeholder="ca-app-pub-xxxxxxxx/yyyyyyyy"
-                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
-                    />
-                    <span className="text-[10px] text-white/40 block mt-0.5">Must be created as 'Banner' in AdMob</span>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs text-white/70 mb-1">Interstitial Ad Unit ID (Optional)</label>
-                    <input
-                      type="text"
-                      value={sysConfig.admobInterstitialAdUnitId || ""}
-                      onChange={(e) => setSysConfig({ ...sysConfig, admobInterstitialAdUnitId: e.target.value })}
-                      placeholder="ca-app-pub-xxxxxxxx/yyyyyyyy"
-                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
-                    />
-                    <span className="text-[10px] text-amber-400/70 block mt-0.5">Do not reuse Rewarded Interstitial ID (causes Format Mismatch error)</span>
+                    <span className="text-[10px] text-cyan-400/80 block mt-0.5">Must be created as 'Rewarded Interstitial' in AdMob (shown every 3 swipes in discovery)</span>
                   </div>
                 </div>
 
@@ -3245,7 +3223,7 @@ export default function App() {
               </div>
 
               {/* KPI Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
                 <div className="bg-[#161329] border border-white/5 rounded-2xl p-4">
                   <div className="flex items-center justify-between text-white/40 mb-2">
                     <span className="text-xs font-medium">Total Events</span>
@@ -3295,7 +3273,7 @@ export default function App() {
                   <div className="text-[11px] text-amber-300/60 mt-1">Render failed at show time</div>
                 </div>
 
-                <div className="bg-[#161329] border border-pink-500/20 rounded-2xl p-4 bg-gradient-to-b from-pink-500/5 to-transparent col-span-2 sm:col-span-1">
+                <div className="bg-[#161329] border border-pink-500/20 rounded-2xl p-4 bg-gradient-to-b from-pink-500/5 to-transparent">
                   <div className="flex items-center justify-between text-white/40 mb-2">
                     <span className="text-xs font-medium text-pink-300">Not Ready Fallbacks</span>
                     <Clock className="w-4 h-4 text-pink-400" />
@@ -3304,6 +3282,22 @@ export default function App() {
                     {adDiagnostics?.fallbackCount ?? adDiagnostics?.notReadyFallbacks ?? 0}
                   </div>
                   <div className="text-[11px] text-pink-300/60 mt-1">Free credit granted w/o ad</div>
+                </div>
+
+                <div className="bg-[#161329] border border-cyan-500/20 rounded-2xl p-4 bg-gradient-to-b from-cyan-500/5 to-transparent">
+                  <div className="flex items-center justify-between text-white/40 mb-2">
+                    <span className="text-xs font-medium text-cyan-300">Ad Clicks</span>
+                    <MousePointerClick className="w-4 h-4 text-cyan-400" />
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-bold text-cyan-400">
+                      {adDiagnostics?.totalClicks ?? 0}
+                    </span>
+                    <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                      {adDiagnostics?.adCtr ?? "0%"} CTR
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-cyan-300/60 mt-1">Direct user ad clicks</div>
                 </div>
               </div>
 
@@ -3428,6 +3422,7 @@ export default function App() {
                       className="bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white/80 focus:outline-none focus:border-pink-500"
                     >
                       <option value="all">All Events</option>
+                      <option value="ad_clicked">🖱️ Ad Clicked (User Clicks)</option>
                       <option value="load_failed">Load Failed (NO_FILL / Errors)</option>
                       <option value="not_ready_fallback">Not Ready Fallback</option>
                       <option value="loaded">Loaded</option>
@@ -3460,10 +3455,9 @@ export default function App() {
                       }}
                       className="bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white/80 focus:outline-none focus:border-pink-500"
                     >
-                      <option value="all">All Formats</option>
-                      <option value="rewarded">Rewarded Video</option>
-                      <option value="rewarded_interstitial">Rewarded Interstitial</option>
-                      <option value="interstitial">Interstitial</option>
+                      <option value="all">All Formats (2 Active)</option>
+                      <option value="rewarded">Rewarded Video (Consent / Credits)</option>
+                      <option value="rewarded_interstitial">Rewarded Interstitial (3 Swipes)</option>
                     </select>
 
                     {/* Error Code Filter */}
@@ -3600,7 +3594,11 @@ export default function App() {
 
                               {/* Event Status */}
                               <td className="py-3 px-4 whitespace-nowrap">
-                                {isFailed ? (
+                                {log.eventType === "ad_clicked" ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                                    <MousePointerClick className="w-3 h-3" /> ad_clicked
+                                  </span>
+                                ) : isFailed ? (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
                                     <XCircle className="w-3 h-3" /> {log.eventType}
                                   </span>
@@ -4468,6 +4466,9 @@ export default function App() {
                   <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
                     ✓ {selectedNotification.stats?.sent ?? 0} Delivered
                   </span>
+                  <span className="px-2.5 py-1 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20 font-bold">
+                    👆 {selectedNotification.stats?.clicked ?? 0} Clicked
+                  </span>
                   <span className="px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 font-bold">
                     ✕ {selectedNotification.stats?.failed ?? 0} Failed
                   </span>
@@ -4501,6 +4502,7 @@ export default function App() {
               <div className="flex items-center gap-1.5 self-start sm:self-auto">
                 {[
                   { id: "all", label: "All" },
+                  { id: "clicked", label: "Clicked" },
                   { id: "delivered", label: "Delivered" },
                   { id: "failed", label: "Failed" },
                   { id: "no_token", label: "No Token" },
@@ -4588,7 +4590,11 @@ export default function App() {
                               </td>
 
                               <td className="py-3 px-4 whitespace-nowrap">
-                                {r.status === "delivered" ? (
+                                {r.status === "clicked" ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/15 text-sky-400 border border-sky-500/30">
+                                    <MousePointerClick className="w-3 h-3" /> Clicked & Opened
+                                  </span>
+                                ) : r.status === "delivered" ? (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                                     <CheckCircle2 className="w-3 h-3" /> Delivered
                                   </span>
@@ -4610,7 +4616,11 @@ export default function App() {
                               </td>
 
                               <td className="py-3 pl-4 text-right text-white/50 text-[11px] whitespace-nowrap">
-                                {r.deliveredAt ? new Date(r.deliveredAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                                {r.clickedAt
+                                  ? `Clicked ${new Date(r.clickedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                                  : r.deliveredAt
+                                  ? new Date(r.deliveredAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                                  : "—"}
                               </td>
                             </tr>
                           ))}
