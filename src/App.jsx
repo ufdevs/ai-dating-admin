@@ -155,6 +155,7 @@ export default function App() {
     aiProvider: "auto",
     geminiApiKey: "",
     geminiModel: "gemini-2.5-flash",
+    geminiImageModel: "gemini-2.5-flash-image",
     openRouterApiKey: "",
     openRouterModel: "openrouter/free",
     openRouterFallbackModels: "",
@@ -1800,6 +1801,25 @@ export default function App() {
                     </div>
                   </div>
 
+                  <div className="pt-2 border-t border-white/5">
+                    <label className="block text-xs font-semibold text-white/90 mb-1">
+                      🖼️ Image Generation Model (Tier 1 Rate Limit)
+                    </label>
+                    <select
+                      value={sysConfig.geminiImageModel || "gemini-2.5-flash-image"}
+                      onChange={(e) => setSysConfig({ ...sysConfig, geminiImageModel: e.target.value })}
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:border-blue-500 text-white"
+                    >
+                      <option value="gemini-2.5-flash-image">Nano Banana (Gemini 2.5 Flash Preview Image) • 500 RPM / 2K RPD</option>
+                      <option value="gemini-3.1-flash-lite-image">Nano Banana 2 Lite (Gemini 3.1 Flash Lite Image) • 150 RPM / 1K RPD</option>
+                      <option value="gemini-3.1-flash-image">Nano Banana 2 (Gemini 3.1 Flash Image) • 100 RPM / 1K RPD</option>
+                      <option value="flux-pollinations">Pollinations FLUX.1 • High Quality Unlimited Fallback</option>
+                    </select>
+                    <p className="text-[10px] text-white/40 mt-1">
+                      Highest quota tier 1 image models for VIP companion selfies & photo generation.
+                    </p>
+                  </div>
+
                   <div className="pt-2">
                     <button
                       type="button"
@@ -1887,6 +1907,25 @@ export default function App() {
                         </button>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-white/5">
+                    <label className="block text-xs font-semibold text-white/90 mb-1">
+                      🖼️ Image Generation Model (Tier 1 Rate Limit)
+                    </label>
+                    <select
+                      value={sysConfig.geminiImageModel || "gemini-2.5-flash-image"}
+                      onChange={(e) => setSysConfig({ ...sysConfig, geminiImageModel: e.target.value })}
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono focus:outline-none focus:border-blue-500 text-white"
+                    >
+                      <option value="gemini-2.5-flash-image">Nano Banana (Gemini 2.5 Flash Preview Image) • 500 RPM / 2K RPD</option>
+                      <option value="gemini-3.1-flash-lite-image">Nano Banana 2 Lite (Gemini 3.1 Flash Lite Image) • 150 RPM / 1K RPD</option>
+                      <option value="gemini-3.1-flash-image">Nano Banana 2 (Gemini 3.1 Flash Image) • 100 RPM / 1K RPD</option>
+                      <option value="flux-pollinations">Pollinations FLUX.1 • High Quality Unlimited Fallback</option>
+                    </select>
+                    <p className="text-[10px] text-white/40 mt-1">
+                      Highest quota tier 1 image models for VIP companion selfies & photo generation.
+                    </p>
                   </div>
 
                   <div className="pt-2">
