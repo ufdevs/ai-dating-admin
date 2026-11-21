@@ -152,9 +152,9 @@ export default function App() {
     premiumTextLimit: -1,
     premiumVoiceLimit: -1,
     premiumCallMinutes: 120,
-    aiProvider: "auto",
+    aiProvider: "gemini",
     geminiApiKey: "",
-    geminiModel: "gemini-2.5-flash",
+    geminiModel: "gemini-3.5-flash-lite",
     geminiImageModel: "gemini-2.5-flash-image",
     openRouterApiKey: "",
     openRouterModel: "openrouter/free",
@@ -1778,13 +1778,13 @@ export default function App() {
                     <label className="block text-xs text-white/70 mb-1">Gemini Model</label>
                     <input
                       type="text"
-                      value={sysConfig.geminiModel || "gemini-2.5-flash"}
+                      value={sysConfig.geminiModel || "gemini-3.5-flash-lite"}
                       onChange={(e) => setSysConfig({ ...sysConfig, geminiModel: e.target.value })}
-                      placeholder="gemini-2.5-flash"
+                      placeholder="gemini-3.5-flash-lite"
                       className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-blue-500"
                     />
                     <div className="flex flex-wrap gap-1.5 mt-2">
-                      {["gemini-2.5-flash", "gemini-3.5-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"].map((m) => (
+                      {["gemini-3.5-flash-lite", "gemini-2.5-flash"].map((m) => (
                         <button
                           key={m}
                           type="button"
