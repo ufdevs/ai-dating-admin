@@ -39,6 +39,8 @@ import {
   XCircle,
   Image as ImageIcon,
   MousePointerClick,
+  Cpu,
+  Zap,
 } from "lucide-react";
 import {
   AreaChart,
@@ -150,9 +152,14 @@ export default function App() {
     premiumTextLimit: -1,
     premiumVoiceLimit: -1,
     premiumCallMinutes: 120,
+    aiProvider: "auto",
+    geminiApiKey: "",
+    geminiModel: "gemini-2.5-flash",
     openRouterApiKey: "",
-    openRouterModel: "meta-llama/llama-3.3-70b-instruct",
+    openRouterModel: "openrouter/free",
     openRouterFallbackModels: "",
+    aiMaxTokens: 150,
+    aiTemperature: 0.85,
     livekitUrl: "",
     livekitApiKey: "",
     livekitApiSecret: "",
@@ -277,6 +284,23 @@ export default function App() {
   const [selectedAdLog, setSelectedAdLog] = useState(null);
   const [isAdLogModalOpen, setIsAdLogModalOpen] = useState(false);
   const [isAdLogsLoading, setIsAdLogsLoading] = useState(false);
+
+  // 🤖 AI Engine & Telemetry States
+  const [aiAnalytics, setAiAnalytics] = useState(null);
+  const [aiLogs, setAiLogs] = useState([]);
+  const [aiTotalLogs, setAiTotalLogs] = useState(0);
+  const [aiLogPage, setAiLogPage] = useState(1);
+  const [aiLogTotalPages, setAiLogTotalPages] = useState(1);
+  const [aiProviderFilter, setAiProviderFilter] = useState("all");
+  const [aiStatusFilter, setAiStatusFilter] = useState("all");
+  const [aiSearch, setAiSearch] = useState("");
+  const [isAiLogsLoading, setIsAiLogsLoading] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [testingProvider, setTestingProvider] = useState(null);
+  const [testResult, setTestResult] = useState(null);
+  const [inspectingAiLog, setInspectingAiLog] = useState(null);
+  const [isAiLogModalOpen, setIsAiLogModalOpen] = useState(false);
+  const [isAiSaving, setIsAiSaving] = useState(false);
 
   const [notificationMsg, setNotificationMsg] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -431,6 +455,9 @@ export default function App() {
       } else if (activeTab === "adlogs") {
         fetchAdLogs();
         fetchAdDiagnostics();
+      } else if (activeTab === "ai") {
+        fetchAiAnalytics();
+        fetchAiLogs();
       }
 
       // Always fetch latest system config
@@ -798,6 +825,95 @@ export default function App() {
     }
   }, [adLogsPage, adLogsEventFilter, adLogsProviderFilter, adLogsTypeFilter, adLogsErrorCodeFilter, activeTab]);
 
+  // 🤖 AI Provider Telemetry & Management Fetchers
+  const fetchAiAnalytics = async () => {
+    try {
+      const res = await api.get("/admin/ai/analytics");
+      if (res.data?.success) {
+        setAiAnalytics(res.data.data);
+        if (res.data.data.config) {
+          setSysConfig((prev) => ({ ...prev, ...res.data.data.config }));
+        }
+      }
+    } catch (err) {
+      console.warn("Failed fetching AI analytics:", err.message);
+    }
+  };
+
+  const fetchAiLogs = async () => {
+    setIsAiLogsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: aiLogPage,
+        limit: 15,
+        provider: aiProviderFilter,
+        status: aiStatusFilter,
+        search: aiSearch.trim(),
+      });
+      const res = await api.get(`/admin/ai/logs?${params.toString()}`);
+      if (res.data?.success) {
+        setAiLogs(res.data.data.logs || []);
+        setAiTotalLogs(res.data.data.total || 0);
+        setAiLogTotalPages(res.data.data.totalPages || 1);
+      }
+    } catch (err) {
+      console.warn("Failed fetching AI logs:", err.message);
+    } finally {
+      setIsAiLogsLoading(false);
+    }
+  };
+
+  const handleTestAiProvider = async (provider) => {
+    setTestingProvider(provider);
+    setTestResult(null);
+    try {
+      const key = provider === "gemini" ? sysConfig.geminiApiKey : sysConfig.openRouterApiKey;
+      const model = provider === "gemini" ? sysConfig.geminiModel : sysConfig.openRouterModel;
+      const res = await api.post("/admin/ai/test", { provider, apiKey: key, model });
+      if (res.data?.success) {
+        setTestResult(res.data.data);
+        showToast(`${provider === "gemini" ? "Google Gemini" : "OpenRouter"} test: ${res.data.data.success ? "SUCCESS ✅" : "FAILED ❌"}`);
+      }
+    } catch (err) {
+      setTestResult({
+        success: false,
+        provider,
+        error: err.response?.data?.message || err.message,
+      });
+      showToast(`${provider === "gemini" ? "Google Gemini" : "OpenRouter"} test failed: ${err.message}`);
+    } finally {
+      setTestingProvider(null);
+    }
+  };
+
+  const handleSaveAiSettings = async () => {
+    setIsAiSaving(true);
+    try {
+      await api.post("/admin/system-config", {
+        aiProvider: sysConfig.aiProvider,
+        geminiApiKey: sysConfig.geminiApiKey,
+        geminiModel: sysConfig.geminiModel,
+        openRouterApiKey: sysConfig.openRouterApiKey,
+        openRouterModel: sysConfig.openRouterModel,
+        aiMaxTokens: Number(sysConfig.aiMaxTokens) || 150,
+        aiTemperature: Number(sysConfig.aiTemperature) || 0.85,
+      });
+      showToast("AI provider configuration updated and live! 🚀");
+      fetchAiAnalytics();
+    } catch (err) {
+      showToast("Failed to save AI configuration: " + err.message);
+    } finally {
+      setIsAiSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoggedIn && activeTab === "ai") {
+      fetchAiAnalytics();
+      fetchAiLogs();
+    }
+  }, [aiLogPage, aiProviderFilter, aiStatusFilter, activeTab]);
+
   // Toggle user block
   const handleToggleBlock = async (id) => {
     try {
@@ -969,6 +1085,7 @@ export default function App() {
           {[
             { id: "dashboard", label: "Dashboard", icon: Activity },
             { id: "conversations", label: "AI Conversations", icon: MessageSquare },
+            { id: "ai", label: "AI Engine & Telemetry", icon: Sparkles },
             { id: "users", label: "User Directory", icon: Users },
             { id: "personas", label: "AI Personas", icon: Bot },
             { id: "subscriptions", label: "Subscriptions & Limits", icon: CreditCard },
@@ -1030,6 +1147,8 @@ export default function App() {
                 ? "AI Companion Personas Manager"
                 : activeTab === "conversations"
                 ? "User AI Conversations & Dialogue Improvement"
+                : activeTab === "ai"
+                ? "AI Engine Orchestration & Live Telemetry"
                 : activeTab === "users"
                 ? "User Directory & Account Management"
                 : activeTab === "flags"
@@ -1489,6 +1608,640 @@ export default function App() {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB: AI ENGINE & TELEMETRY */}
+          {activeTab === "ai" && (
+            <div className="space-y-6">
+              {/* Top Banner */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-gradient-to-tr from-blue-500 to-purple-600 rounded-xl shadow-lg shadow-purple-500/20 text-white shrink-0">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <h2 className="font-bold text-base text-white">Google Gemini & OpenRouter AI Engine</h2>
+                      <span className="text-[10px] font-mono px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded-full border border-blue-500/30">
+                        Dual Provider Architecture
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/60 max-w-2xl leading-relaxed">
+                      Configure dynamic LLM providers, change API keys on the fly, enforce token-saving brevity, and monitor real-time rate-limit fallback telemetry.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => {
+                      fetchAiAnalytics();
+                      fetchAiLogs();
+                    }}
+                    disabled={isAiLogsLoading}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl text-xs font-semibold flex items-center gap-2 transition"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isAiLogsLoading ? "animate-spin" : ""}`} /> Refresh Telemetry
+                  </button>
+                </div>
+              </div>
+
+              {/* Provider Selection Cards */}
+              <div>
+                <h3 className="text-xs font-semibold text-white/70 uppercase tracking-wider mb-3">
+                  Select Active AI Orchestration Mode
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Mode 1: Auto Fallback */}
+                  <div
+                    onClick={() => setSysConfig({ ...sysConfig, aiProvider: "auto" })}
+                    className={`cursor-pointer p-4 rounded-xl border transition relative ${
+                      (sysConfig.aiProvider || "auto") === "auto"
+                        ? "bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 border-blue-500/50 shadow-lg shadow-blue-500/10"
+                        : "bg-[#161329] border-white/5 hover:border-white/15"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30">
+                        RECOMMENDED • ZERO DOWNTIME
+                      </span>
+                      {(sysConfig.aiProvider || "auto") === "auto" && (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      )}
+                    </div>
+                    <h4 className="font-bold text-sm text-white flex items-center gap-1.5">
+                      🔄 Auto-Fallback Dual Engine
+                    </h4>
+                    <p className="text-xs text-white/60 mt-1.5 leading-relaxed">
+                      Uses <strong>Google Gemini</strong> as primary. If Google hits daily quotas or rate limits, it seamlessly falls back to <strong>OpenRouter</strong> with zero chat interruption.
+                    </p>
+                  </div>
+
+                  {/* Mode 2: Gemini Only */}
+                  <div
+                    onClick={() => setSysConfig({ ...sysConfig, aiProvider: "gemini" })}
+                    className={`cursor-pointer p-4 rounded-xl border transition relative ${
+                      sysConfig.aiProvider === "gemini"
+                        ? "bg-blue-500/10 border-blue-500/50 shadow-lg shadow-blue-500/10"
+                        : "bg-[#161329] border-white/5 hover:border-white/15"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded-full border border-blue-500/30">
+                        GOOGLE AI STUDIO
+                      </span>
+                      {sysConfig.aiProvider === "gemini" && (
+                        <CheckCircle2 className="w-4 h-4 text-blue-400" />
+                      )}
+                    </div>
+                    <h4 className="font-bold text-sm text-white flex items-center gap-1.5">
+                      🌐 Google Gemini Exclusively
+                    </h4>
+                    <p className="text-xs text-white/60 mt-1.5 leading-relaxed">
+                      All messages routed directly through Google Generative Language API. Fastest latency and state-of-the-art conversational fluency.
+                    </p>
+                  </div>
+
+                  {/* Mode 3: OpenRouter Only */}
+                  <div
+                    onClick={() => setSysConfig({ ...sysConfig, aiProvider: "openrouter" })}
+                    className={`cursor-pointer p-4 rounded-xl border transition relative ${
+                      sysConfig.aiProvider === "openrouter"
+                        ? "bg-purple-500/10 border-purple-500/50 shadow-lg shadow-purple-500/10"
+                        : "bg-[#161329] border-white/5 hover:border-white/15"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-bold px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded-full border border-purple-500/30">
+                        OPENROUTER GATEWAY
+                      </span>
+                      {sysConfig.aiProvider === "openrouter" && (
+                        <CheckCircle2 className="w-4 h-4 text-purple-400" />
+                      )}
+                    </div>
+                    <h4 className="font-bold text-sm text-white flex items-center gap-1.5">
+                      🚀 OpenRouter Exclusively
+                    </h4>
+                    <p className="text-xs text-white/60 mt-1.5 leading-relaxed">
+                      Routes through OpenRouter API using openrouter/free or custom open-weight companion models.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Provider Key & Model Configuration (2 Columns) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Google Gemini Card */}
+                <div className="bg-[#161329] border border-blue-500/20 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-blue-400"></div>
+                      <h4 className="font-bold text-sm text-white">Google Gemini Settings</h4>
+                    </div>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                        sysConfig.geminiApiKey || aiAnalytics?.config?.geminiConfigured
+                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                          : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                      }`}
+                    >
+                      {sysConfig.geminiApiKey || aiAnalytics?.config?.geminiConfigured
+                        ? "API KEY CONFIGURED"
+                        : "KEY MISSING"}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-white/70 mb-1">
+                      Google Gemini API Key (GEMINI_API_KEY)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showGeminiKey ? "text" : "password"}
+                        value={sysConfig.geminiApiKey || ""}
+                        onChange={(e) => setSysConfig({ ...sysConfig, geminiApiKey: e.target.value })}
+                        placeholder="AIzaSy... or AQ..."
+                        className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-blue-500 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowGeminiKey(!showGeminiKey)}
+                        className="absolute right-3 top-2.5 text-white/40 hover:text-white"
+                      >
+                        {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-white/70 mb-1">Gemini Model</label>
+                    <input
+                      type="text"
+                      value={sysConfig.geminiModel || "gemini-2.5-flash"}
+                      onChange={(e) => setSysConfig({ ...sysConfig, geminiModel: e.target.value })}
+                      placeholder="gemini-2.5-flash"
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-blue-500"
+                    />
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {["gemini-2.5-flash", "gemini-3.5-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setSysConfig({ ...sysConfig, geminiModel: m })}
+                          className={`text-[10px] font-mono px-2 py-0.5 rounded-lg border transition ${
+                            sysConfig.geminiModel === m
+                              ? "bg-blue-500/20 text-blue-300 border-blue-500/40"
+                              : "bg-white/5 text-white/40 border-white/10 hover:text-white"
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      disabled={testingProvider === "gemini"}
+                      onClick={() => handleTestAiProvider("gemini")}
+                      className="w-full py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl text-xs font-semibold text-blue-300 flex items-center justify-center gap-2 transition"
+                    >
+                      {testingProvider === "gemini" ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Testing Gemini API...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-3.5 h-3.5" /> Test Gemini Live Ping
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* OpenRouter Card */}
+                <div className="bg-[#161329] border border-purple-500/20 rounded-2xl p-5 space-y-4">
+                  <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full bg-purple-400"></div>
+                      <h4 className="font-bold text-sm text-white">OpenRouter Settings</h4>
+                    </div>
+                    <span
+                      className={`text-[10px] font-mono px-2 py-0.5 rounded-full border ${
+                        sysConfig.openRouterApiKey || aiAnalytics?.config?.openRouterConfigured
+                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+                          : "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                      }`}
+                    >
+                      {sysConfig.openRouterApiKey || aiAnalytics?.config?.openRouterConfigured
+                        ? "API KEY CONFIGURED"
+                        : "KEY MISSING"}
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-white/70 mb-1">
+                      OpenRouter API Key (OPENROUTER_API_KEY)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showApiKey ? "text" : "password"}
+                        value={sysConfig.openRouterApiKey || ""}
+                        onChange={(e) => setSysConfig({ ...sysConfig, openRouterApiKey: e.target.value })}
+                        placeholder="sk-or-v1-..."
+                        className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-purple-500 pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowApiKey(!showApiKey)}
+                        className="absolute right-3 top-2.5 text-white/40 hover:text-white"
+                      >
+                        {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs text-white/70 mb-1">OpenRouter Model</label>
+                    <input
+                      type="text"
+                      value={sysConfig.openRouterModel || "openrouter/free"}
+                      onChange={(e) => setSysConfig({ ...sysConfig, openRouterModel: e.target.value })}
+                      placeholder="openrouter/free"
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-purple-500"
+                    />
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {["openrouter/free", "nvidia/nemotron-3.5-lightning:free", "liquid/lfm-3-1.7b:free"].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setSysConfig({ ...sysConfig, openRouterModel: m })}
+                          className={`text-[10px] font-mono px-2 py-0.5 rounded-lg border transition ${
+                            sysConfig.openRouterModel === m
+                              ? "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                              : "bg-white/5 text-white/40 border-white/10 hover:text-white"
+                          }`}
+                        >
+                          {m}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      disabled={testingProvider === "openrouter"}
+                      onClick={() => handleTestAiProvider("openrouter")}
+                      className="w-full py-2 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 rounded-xl text-xs font-semibold text-purple-300 flex items-center justify-center gap-2 transition"
+                    >
+                      {testingProvider === "openrouter" ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Testing OpenRouter API...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-3.5 h-3.5" /> Test OpenRouter Live Ping
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Brevity & Token Optimization Strip */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="flex-1 space-y-1">
+                  <h4 className="font-bold text-xs text-white flex items-center gap-1.5">
+                    <Cpu className="w-4 h-4 text-pink-400" /> Brevity & Context Memory Optimization (Token Saver)
+                  </h4>
+                  <p className="text-[11px] text-white/60 leading-relaxed">
+                    Texting like a real human (1 to 2 short sentences) cuts token consumption by ~85%, reduces latency to sub-second speeds, and prevents exhausting free daily limits.
+                  </p>
+                </div>
+                <div className="flex items-center gap-4 w-full md:w-auto">
+                  <div className="w-32">
+                    <label className="block text-[10px] text-white/50 mb-0.5">Max Output Tokens</label>
+                    <input
+                      type="number"
+                      value={sysConfig.aiMaxTokens || 150}
+                      onChange={(e) => setSysConfig({ ...sysConfig, aiMaxTokens: parseInt(e.target.value) || 150 })}
+                      min="50"
+                      max="500"
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-1.5 text-xs font-mono focus:outline-none focus:border-pink-500 text-center"
+                    />
+                  </div>
+                  <button
+                    onClick={handleSaveAiSettings}
+                    disabled={isAiSaving}
+                    className="px-6 py-2.5 bg-gradient-to-r from-pink-500 to-purple-600 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-lg shadow-pink-500/25 hover:opacity-90 transition shrink-0 mt-3 md:mt-0"
+                  >
+                    {isAiSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    Save AI Settings
+                  </button>
+                </div>
+              </div>
+
+              {/* Test Connection Output Box */}
+              {testResult && (
+                <div
+                  className={`p-4 rounded-2xl border text-xs font-mono space-y-1.5 ${
+                    testResult.success
+                      ? "bg-emerald-950/20 border-emerald-500/30 text-emerald-300"
+                      : "bg-red-950/20 border-red-500/30 text-red-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold uppercase tracking-wider">
+                      {testResult.provider} Test Result: {testResult.success ? "SUCCESS" : "ERROR"}
+                    </span>
+                    <span>Latency: {testResult.latencyMs}ms</span>
+                  </div>
+                  {testResult.success ? (
+                    <div>
+                      <p className="text-white/80">Model: {testResult.model}</p>
+                      <p className="text-white/90 bg-black/40 p-2 rounded-lg mt-1 font-sans">
+                        &ldquo;{testResult.reply}&rdquo;
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-red-400 font-sans mt-1">{testResult.error}</p>
+                  )}
+                </div>
+              )}
+
+              {/* KPI Analytics Row (5 Cards) */}
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                <div className="bg-[#161329] border border-white/5 rounded-2xl p-4">
+                  <span className="text-[11px] text-white/50 block">Total Requests Today</span>
+                  <div className="text-2xl font-bold mt-1 text-white">
+                    {aiAnalytics?.today?.totalRequests ?? 0}
+                  </div>
+                  <span className="text-[10px] text-white/40 mt-0.5 block">Logged AI turns</span>
+                </div>
+
+                <div className="bg-[#161329] border border-blue-500/20 rounded-2xl p-4">
+                  <span className="text-[11px] text-blue-300 block">Google Gemini</span>
+                  <div className="text-2xl font-bold mt-1 text-blue-400">
+                    {aiAnalytics?.today?.geminiRequests ?? 0}
+                  </div>
+                  <span className="text-[10px] text-blue-300/60 mt-0.5 block">
+                    {aiAnalytics?.today?.totalRequests > 0
+                      ? `${Math.round(((aiAnalytics.today.geminiRequests || 0) / aiAnalytics.today.totalRequests) * 100)}% share`
+                      : "0% share"}
+                  </span>
+                </div>
+
+                <div className="bg-[#161329] border border-purple-500/20 rounded-2xl p-4">
+                  <span className="text-[11px] text-purple-300 block">OpenRouter</span>
+                  <div className="text-2xl font-bold mt-1 text-purple-400">
+                    {aiAnalytics?.today?.openRouterRequests ?? 0}
+                  </div>
+                  <span className="text-[10px] text-purple-300/60 mt-0.5 block">
+                    {aiAnalytics?.today?.totalRequests > 0
+                      ? `${Math.round(((aiAnalytics.today.openRouterRequests || 0) / aiAnalytics.today.totalRequests) * 100)}% share`
+                      : "0% share"}
+                  </span>
+                </div>
+
+                <div className="bg-[#161329] border border-amber-500/20 rounded-2xl p-4">
+                  <span className="text-[11px] text-amber-300 block">Fallback Rescues</span>
+                  <div className="text-2xl font-bold mt-1 text-amber-400">
+                    {aiAnalytics?.today?.fallbackCount ?? 0}
+                  </div>
+                  <span className="text-[10px] text-amber-300/60 mt-0.5 block">Saved from quota errors</span>
+                </div>
+
+                <div className="bg-[#161329] border border-white/5 rounded-2xl p-4 col-span-2 lg:col-span-1">
+                  <span className="text-[11px] text-white/50 block">Tokens Consumed</span>
+                  <div className="text-2xl font-bold mt-1 text-white">
+                    {(aiAnalytics?.today?.totalTokens || 0).toLocaleString()}
+                  </div>
+                  <span className="text-[10px] text-white/40 mt-0.5 block">Tokens saved via brevity</span>
+                </div>
+              </div>
+
+              {/* AI Telemetry Logs Table */}
+              <div className="bg-[#161329] border border-white/5 rounded-2xl p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-bold text-sm text-white">Live AI Turn Telemetry</h3>
+                    <p className="text-[11px] text-white/50">
+                      Real-time stream of companion dialogue requests, latency, token counts, and fallback events
+                    </p>
+                  </div>
+                  <div className="text-xs text-white/40 font-mono">
+                    Total Logs: {aiTotalLogs}
+                  </div>
+                </div>
+
+                {/* Filter Toolbar */}
+                <div className="flex flex-wrap items-center gap-3 pt-2">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-white/40" />
+                    <input
+                      type="text"
+                      placeholder="Search by model, message text, error..."
+                      value={aiSearch}
+                      onChange={(e) => setAiSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          setAiLogPage(1);
+                          fetchAiLogs();
+                        }
+                      }}
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-pink-500"
+                    />
+                  </div>
+
+                  <select
+                    value={aiProviderFilter}
+                    onChange={(e) => {
+                      setAiProviderFilter(e.target.value);
+                      setAiLogPage(1);
+                    }}
+                    className="bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2 text-xs text-white/70 focus:outline-none"
+                  >
+                    <option value="all">All Providers</option>
+                    <option value="gemini">Google Gemini</option>
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="failed">Failed Turns</option>
+                  </select>
+
+                  <select
+                    value={aiStatusFilter}
+                    onChange={(e) => {
+                      setAiStatusFilter(e.target.value);
+                      setAiLogPage(1);
+                    }}
+                    className="bg-[#0E0C1C] border border-white/10 rounded-xl px-3 py-2 text-xs text-white/70 focus:outline-none"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="success">Success</option>
+                    <option value="fallback">Fallback Rescued</option>
+                    <option value="error">Error</option>
+                  </select>
+
+                  <button
+                    onClick={() => {
+                      setAiLogPage(1);
+                      fetchAiLogs();
+                    }}
+                    className="px-4 py-2 bg-pink-500/20 text-pink-300 border border-pink-500/30 rounded-xl text-xs font-semibold hover:bg-pink-500/30 transition"
+                  >
+                    Apply Filter
+                  </button>
+                </div>
+
+                {/* Table */}
+                <div className="overflow-x-auto rounded-xl border border-white/5">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-white/[0.03] text-white/50 border-b border-white/5 uppercase text-[10px] tracking-wider font-mono">
+                      <tr>
+                        <th className="py-3 px-4">Time</th>
+                        <th className="py-3 px-4">User</th>
+                        <th className="py-3 px-4">Companion</th>
+                        <th className="py-3 px-4">Provider</th>
+                        <th className="py-3 px-4">Model</th>
+                        <th className="py-3 px-4">Latency</th>
+                        <th className="py-3 px-4">Tokens</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 font-sans">
+                      {isAiLogsLoading ? (
+                        <tr>
+                          <td colSpan={9} className="py-8 text-center text-white/40">
+                            <div className="flex items-center justify-center gap-2">
+                              <RefreshCw className="w-4 h-4 animate-spin text-pink-500" />
+                              Loading AI telemetry records...
+                            </div>
+                          </td>
+                        </tr>
+                      ) : aiLogs.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="py-8 text-center text-white/40">
+                            No AI turn records found matching current criteria.
+                          </td>
+                        </tr>
+                      ) : (
+                        aiLogs.map((log) => (
+                          <tr key={log._id} className="hover:bg-white/[0.02] transition">
+                            <td className="py-3 px-4 font-mono text-[11px] text-white/60 whitespace-nowrap">
+                              {new Date(log.createdAt).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                second: "2-digit",
+                              })}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="text-white font-medium text-xs">
+                                {log.userId?.name || "Guest User"}
+                              </div>
+                              <div className="text-[10px] text-white/40 truncate max-w-[120px]">
+                                {log.userId?.email || "anonymous"}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-1.5">
+                                {log.personaId?.avatarUrl ? (
+                                  <img
+                                    src={log.personaId.avatarUrl}
+                                    alt=""
+                                    className="w-5 h-5 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-pink-500/20 text-pink-300 flex items-center justify-center text-[9px] font-bold">
+                                    AI
+                                  </div>
+                                )}
+                                <span className="text-white text-xs truncate max-w-[100px]">
+                                  {log.personaId?.name || "AI Partner"}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              {log.provider === "gemini" ? (
+                                <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold">
+                                  Google Gemini
+                                </span>
+                              ) : log.provider === "openrouter" ? (
+                                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold">
+                                  OpenRouter
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30 text-[10px] font-bold">
+                                  Failed
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-mono text-[11px] text-white/80 whitespace-nowrap">
+                              {log.model}
+                            </td>
+                            <td className="py-3 px-4 font-mono text-[11px] text-white/70">
+                              {log.latencyMs ? `${log.latencyMs}ms` : "—"}
+                            </td>
+                            <td className="py-3 px-4 font-mono text-[11px] text-white/70">
+                              {log.totalTokens || "—"}
+                            </td>
+                            <td className="py-3 px-4">
+                              {log.status === "success" ? (
+                                <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold">
+                                  Success
+                                </span>
+                              ) : log.fallbackTriggered || log.status === "fallback" ? (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[10px] font-semibold">
+                                  Fallback Rescued
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 text-[10px] font-semibold">
+                                  Error
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4">
+                              <button
+                                onClick={() => {
+                                  setInspectingAiLog(log);
+                                  setIsAiLogModalOpen(true);
+                                }}
+                                className="px-2.5 py-1 bg-white/5 hover:bg-white/10 rounded-lg text-[11px] text-white/70 hover:text-white transition"
+                              >
+                                Inspect
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination */}
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-xs text-white/40">
+                    Page {aiLogPage} of {aiLogTotalPages}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={aiLogPage <= 1}
+                      onClick={() => setAiLogPage((p) => Math.max(1, p - 1))}
+                      className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs flex items-center gap-1 transition"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                    </button>
+                    <button
+                      disabled={aiLogPage >= aiLogTotalPages}
+                      onClick={() => setAiLogPage((p) => Math.min(aiLogTotalPages, p + 1))}
+                      className="px-3 py-1.5 bg-white/5 hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs flex items-center gap-1 transition"
+                    >
+                      Next <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -3717,6 +4470,62 @@ export default function App() {
 
               <div className="space-y-4">
                 <div>
+                  <label className="block text-xs text-white/70 mb-1">Active AI Provider Mode</label>
+                  <select
+                    value={sysConfig.aiProvider || "auto"}
+                    onChange={(e) => setSysConfig({ ...sysConfig, aiProvider: e.target.value })}
+                    className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-pink-500"
+                  >
+                    <option value="auto">Auto-Fallback (Gemini Primary ↔ OpenRouter Secondary - Recommended)</option>
+                    <option value="gemini">Google Gemini Only</option>
+                    <option value="openrouter">OpenRouter Only</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-white/70 mb-1">Google Gemini API Key (GEMINI_API_KEY)</label>
+                  <div className="relative">
+                    <input
+                      type={showGeminiKey ? "text" : "password"}
+                      value={sysConfig.geminiApiKey || ""}
+                      onChange={(e) => setSysConfig({ ...sysConfig, geminiApiKey: e.target.value })}
+                      placeholder="AIzaSy... or AQ..."
+                      className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowGeminiKey(!showGeminiKey)}
+                      className="absolute right-3 top-2.5 text-white/40 hover:text-white"
+                    >
+                      {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-white/70 mb-1">Google Gemini Model</label>
+                  <input
+                    type="text"
+                    value={sysConfig.geminiModel || "gemini-2.5-flash"}
+                    onChange={(e) => setSysConfig({ ...sysConfig, geminiModel: e.target.value })}
+                    placeholder="gemini-2.5-flash"
+                    className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-white/70 mb-1">Max Output Tokens (Brevity Saver)</label>
+                  <input
+                    type="number"
+                    value={sysConfig.aiMaxTokens || 150}
+                    onChange={(e) => setSysConfig({ ...sysConfig, aiMaxTokens: parseInt(e.target.value) || 150 })}
+                    min="50"
+                    max="500"
+                    className="w-full bg-[#0E0C1C] border border-white/10 rounded-xl px-4 py-2.5 text-xs font-mono focus:outline-none focus:border-pink-500"
+                  />
+                </div>
+
+                <div>
                   <label className="block text-xs text-white/70 mb-1">OpenRouter API Key</label>
                   <div className="relative">
                     <input
@@ -4857,6 +5666,120 @@ export default function App() {
                 onClick={() => {
                   setIsAdLogModalOpen(false);
                   setSelectedAdLog(null);
+                }}
+                className="px-5 py-2 bg-white/10 hover:bg-white/15 rounded-xl text-xs font-semibold text-white transition"
+              >
+                Close Inspector
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🤖 AI TURN TELEMETRY INSPECTOR MODAL */}
+      {isAiLogModalOpen && inspectingAiLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#161329] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-5 border-b border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-gradient-to-tr from-blue-500 to-purple-600 rounded-xl text-white">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">AI Turn Telemetry Inspector</h3>
+                  <p className="text-[10px] text-white/50">
+                    {new Date(inspectingAiLog.createdAt).toLocaleString()} • {inspectingAiLog.latencyMs}ms Latency
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsAiLogModalOpen(false);
+                  setInspectingAiLog(null);
+                }}
+                className="p-1.5 rounded-lg text-white/40 hover:text-white hover:bg-white/5"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto">
+              {/* Turn Metrics Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="bg-[#0E0C1C] p-3 rounded-xl border border-white/5">
+                  <span className="text-[10px] text-white/40 block">Provider</span>
+                  <span className="font-bold text-xs capitalize text-white">
+                    {inspectingAiLog.provider === "gemini" ? "Google Gemini" : inspectingAiLog.provider === "openrouter" ? "OpenRouter" : "Failed"}
+                  </span>
+                </div>
+                <div className="bg-[#0E0C1C] p-3 rounded-xl border border-white/5">
+                  <span className="text-[10px] text-white/40 block">Model</span>
+                  <span className="font-mono text-xs text-white/90 truncate block">
+                    {inspectingAiLog.model}
+                  </span>
+                </div>
+                <div className="bg-[#0E0C1C] p-3 rounded-xl border border-white/5">
+                  <span className="text-[10px] text-white/40 block">Total Tokens</span>
+                  <span className="font-mono text-xs text-white">
+                    {inspectingAiLog.totalTokens || 0}
+                  </span>
+                </div>
+                <div className="bg-[#0E0C1C] p-3 rounded-xl border border-white/5">
+                  <span className="text-[10px] text-white/40 block">Status</span>
+                  <span className={`text-xs font-semibold ${inspectingAiLog.status === 'success' ? 'text-emerald-400' : inspectingAiLog.fallbackTriggered ? 'text-amber-400' : 'text-red-400'}`}>
+                    {inspectingAiLog.status === 'success' ? 'Success' : inspectingAiLog.fallbackTriggered ? 'Fallback Rescued' : 'Error'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Fallback Notice if triggered */}
+              {inspectingAiLog.fallbackTriggered && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs space-y-1">
+                  <span className="font-bold text-amber-300 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" /> Primary Provider Failed & Rescued by Secondary
+                  </span>
+                  {inspectingAiLog.errorMessage && (
+                    <p className="text-[11px] text-amber-200/80 font-mono">
+                      Reason: {inspectingAiLog.errorMessage}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* User Message */}
+              <div className="space-y-1.5">
+                <span className="text-xs font-semibold text-white/70">
+                  User ({inspectingAiLog.userId?.name || "User"}):
+                </span>
+                <div className="bg-[#0E0C1C] border border-white/10 rounded-xl p-3.5 text-xs text-white/90 leading-relaxed font-sans">
+                  &ldquo;{inspectingAiLog.userMessagePreview || "—"}&rdquo;
+                </div>
+              </div>
+
+              {/* Companion AI Reply */}
+              <div className="space-y-1.5">
+                <span className="text-xs font-semibold text-pink-300">
+                  Companion ({inspectingAiLog.personaId?.name || "AI"}):
+                </span>
+                <div className="bg-pink-950/20 border border-pink-500/20 rounded-xl p-3.5 text-xs text-pink-100 leading-relaxed font-sans">
+                  &ldquo;{inspectingAiLog.replyPreview || "—"}&rdquo;
+                </div>
+              </div>
+
+              {/* Raw JSON Debug */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono text-white/40">Raw Telemetry Turn Object:</span>
+                <pre className="p-3 bg-[#080611] border border-white/5 rounded-xl font-mono text-[10px] text-white/60 max-h-36 overflow-y-auto">
+                  {JSON.stringify(inspectingAiLog, null, 2)}
+                </pre>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-white/5 flex justify-end">
+              <button
+                onClick={() => {
+                  setIsAiLogModalOpen(false);
+                  setInspectingAiLog(null);
                 }}
                 className="px-5 py-2 bg-white/10 hover:bg-white/15 rounded-xl text-xs font-semibold text-white transition"
               >
