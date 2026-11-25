@@ -3071,12 +3071,13 @@ export default function App() {
                       <label className="block text-xs font-semibold text-white/80 mb-1.5">
                         Target Audience
                       </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                         {[
                           { id: "all", label: "All Users" },
                           { id: "gender", label: "By Gender" },
                           { id: "tier", label: "By Tier" },
                           { id: "user", label: "Single User" },
+                          { id: "chat_opened", label: "Opened Chat" },
                         ].map((t) => (
                           <button
                             key={t.id}
@@ -3142,6 +3143,13 @@ export default function App() {
                           required
                         />
                       </div>
+                    )}
+
+                    {broadcastTargetType === "chat_opened" && (
+                      <p className="text-[11px] text-white/50 -mt-2">
+                        Sends to every user who has opened a companion chat at least once. Tapping the
+                        notification opens their Chats list.
+                      </p>
                     )}
 
                     {/* Title */}
@@ -3287,6 +3295,8 @@ export default function App() {
                         ? `Gender: ${broadcastTargetFilter || "female"}`
                         : broadcastTargetType === "tier"
                         ? `Tier: ${broadcastTargetTier}`
+                        : broadcastTargetType === "chat_opened"
+                        ? "Users who opened a chat"
                         : `User: ${broadcastTargetFilter || "specific"}`}
                     </span>
                   </div>
@@ -3371,6 +3381,8 @@ export default function App() {
                                     ? `Gender: ${log.targetFilter}`
                                     : log.targetType === "tier"
                                     ? `Tier: ${log.targetFilter || log.targetTier}`
+                                    : log.targetType === "chat_opened"
+                                    ? "Opened Chat"
                                     : `Email: ${log.targetFilter}`}
                                 </span>
                               </td>
